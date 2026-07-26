@@ -1961,7 +1961,11 @@ _MEMORY_PROVIDER_SETUP_RE = re.compile(r"^/api/memory/providers/[^/]+/setup$")
 # check, so the `.install_method=docker` stamp (invariant 4) does not refuse it.
 # On Railway the image is immutable: whatever it installs disappears on the next
 # redeploy while config.yaml still names the provider, and the agent then fails
-# to initialise it. We warn instead of blocking so the action stays available for
+# to initialise it. Only the PACKAGE is lost — the endpoint installs pip/external
+# deps and writes no config; provider settings go through PUT
+# /api/memory/providers/<name>/config, which lands in config.yaml + .env on the
+# volume. So re-running the install fully restores the provider, which is why the
+# notice says so rather than implying the setup has to be redone. We warn instead of blocking so the action stays available for
 # a quick trial, and point the user at a GitHub issue rather than at the
 # Dockerfile — most people deploy this template from Railway without a fork, so
 # "edit the Dockerfile" is not an action they can take. Remove this shim if
@@ -1982,6 +1986,9 @@ IMMUTABLE_INSTALL_WARNING_JS = (
     'Installing this provider will work right now, but only until your next '
     'deploy. After that it stays configured while its package is gone, and the '
     'agent fails to start it.\\n\\n'
+    'If that happens, just install it again from here — your provider settings '
+    'and API keys are stored on the Railway volume, not inside the container, so '
+    'nothing needs reconfiguring and it resumes where it left off.\\n\\n'
     'To have it included permanently, please raise an issue here:\\n'
     'https://github.com/praveen-ks-2001/hermes-agent-template/issues\\n\\n'
     'It will be reviewed and built into the template, so next time it works out '
