@@ -1961,9 +1961,11 @@ _MEMORY_PROVIDER_SETUP_RE = re.compile(r"^/api/memory/providers/[^/]+/setup$")
 # check, so the `.install_method=docker` stamp (invariant 4) does not refuse it.
 # On Railway the image is immutable: whatever it installs disappears on the next
 # redeploy while config.yaml still names the provider, and the agent then fails
-# to initialise it. We warn instead of blocking so the action stays available
-# for a quick trial; making it permanent means adding the dependency to the
-# Dockerfile. Remove this shim if upstream ever gates the endpoint itself.
+# to initialise it. We warn instead of blocking so the action stays available for
+# a quick trial, and point the user at a GitHub issue rather than at the
+# Dockerfile — most people deploy this template from Railway without a fork, so
+# "edit the Dockerfile" is not an action they can take. Remove this shim if
+# upstream ever gates the endpoint itself.
 IMMUTABLE_INSTALL_WARNING_JS = (
     '<script>(function(){'
     'var f=window.fetch;if(!f||window.__hermesImmutableWarn)return;'
@@ -1972,11 +1974,19 @@ IMMUTABLE_INSTALL_WARNING_JS = (
     'var u=(typeof input==="string")?input:(input&&input.url)||"";'
     'var m=((init&&init.method)||(input&&input.method)||"GET").toUpperCase();'
     'if(m==="POST"&&/\\/api\\/memory\\/providers\\/[^\\/]+\\/setup/.test(u)&&'
-    '!window.confirm("This deployment runs from an immutable container image.\\n\\n'
-    'Anything installed here lasts only until the next redeploy. After that the '
-    'provider stays configured but its package is gone, and the agent will fail '
-    'to start it.\\n\\nTo make it permanent, add the dependency to the template\'s '
-    'Dockerfile and redeploy.\\n\\nInstall anyway (temporary)?"))'
+    '!window.confirm("MESSAGE FROM THE TEMPLATE CREATOR\\n'
+    '----------------------------------------\\n\\n'
+    'This template is deployed on Railway as an immutable container: the image is '
+    'rebuilt from scratch on every deploy, so anything installed into the running '
+    'container is wiped.\\n\\n'
+    'Installing this provider will work right now, but only until your next '
+    'deploy. After that it stays configured while its package is gone, and the '
+    'agent fails to start it.\\n\\n'
+    'To have it included permanently, please raise an issue here:\\n'
+    'https://github.com/praveen-ks-2001/hermes-agent-template/issues\\n\\n'
+    'It will be reviewed and built into the template, so next time it works out '
+    'of the box with no install step.\\n\\n'
+    'Install anyway (temporary)?"))'
     '{return Promise.reject(new Error("Cancelled: immutable deployment"));}'
     '}catch(e){}return f.apply(this,arguments);};})();</script>'
 )
