@@ -677,6 +677,18 @@
     margin-bottom: 10px;
     letter-spacing: 0.3px;
   }
+  /* Release provenance: which branch carries this release, and the Hermes
+     version it is pinned to. main tracks the newest; each release also keeps
+     a permanent branch so a deployment can stay on an older Hermes. */
+  .changelog-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 12px;
+  }
+  .changelog-meta .chip { display: inline-flex; align-items: center; }
+  .changelog-meta code { color: var(--text); font-size: 11px; }
+
   .changelog-list { list-style: none; padding: 0; margin: 0; }
   .changelog-list li {
     position: relative;
@@ -1576,8 +1588,36 @@
       </div>
       <div class="panel-body">
 
+        <div style="background:rgba(98,114,255,0.06);border:1px solid rgba(98,114,255,0.2);border-radius:8px;padding:12px 15px;margin-bottom:20px;font-size:13px;color:var(--text-dim);line-height:1.6;">
+          The <code>main</code> branch always ships the <strong style="color:var(--text);">latest</strong> Hermes release, and that is what you get by default.
+          Every release also keeps its own permanent branch, listed below. If you'd rather stay on — or roll back to — an older
+          Hermes version, point your Railway service at that branch and redeploy; it will keep working and won't move under you.
+        </div>
+
+        <div class="changelog-entry">
+          <div class="changelog-date">July 27, 2026</div>
+          <div class="changelog-meta">
+            <span class="chip dim">Branch <code>main</code> &nbsp;·&nbsp; <code>v2026.7.20-update</code></span>
+            <span class="chip green">Hermes v2026.7.20</span>
+          </div>
+          <ul class="changelog-list">
+            <li>Updated <strong>Hermes Agent to v2026.7.20</strong> (from v2026.7.1) — adds the new <strong>Hermes Console</strong>, session export, and three new providers: <strong>Fireworks AI</strong>, <strong>DeepInfra</strong> and <strong>Upstage Solar</strong>.</li>
+            <li>Fixed the new <strong>Hermes Console</strong> (Dashboard → System → <em>Open console</em>), which could not connect through this template.</li>
+            <li>Fixed the gateway going offline for ~10s after several quick saves during setup, while the panel still showed <em>running</em>.</li>
+            <li>Fixed the <strong>Chat</strong> tab disconnecting during long agent replies.</li>
+            <li>Fixed <strong>MCP tool-server sign-in</strong>, which returned to an unreachable address after you approved it.</li>
+            <li><strong>Backup &amp; Restore is safer:</strong> Hermes can now report success while silently leaving your chat history out of a backup. A restore is refused unless its automatic safety snapshot is complete, and downloads warn instead of quietly handing you a partial file.</li>
+            <li>Fixed revoked users being silently re-approved after restoring a backup from an older deployment.</li>
+            <li>Installing a memory provider from the dashboard now warns first — this container is rebuilt on every deploy, so anything installed at runtime is lost.</li>
+            <li>Conversation auto-reset now behaves the same on new and existing deployments, and the gateway gets longer to disconnect cleanly when stopping.</li>
+          </ul>
+        </div>
+
         <div class="changelog-entry">
           <div class="changelog-date">July 13, 2026</div>
+          <div class="changelog-meta">
+            <span class="chip dim">Hermes v2026.7.1</span>
+          </div>
           <ul class="changelog-list">
             <li>Added <strong>Backup &amp; Restore</strong> (under <strong>Data</strong> in the sidebar) — download a full snapshot of this deployment (config, provider keys, channel tokens, approved users, chat history, memories, skills, cron jobs) as a zip, and restore it — including into a fresh project — to clone a deployment. A safety snapshot of the current state is taken automatically before every restore.</li>
           </ul>
@@ -1961,6 +2001,10 @@ function app() {
           this.notify(e?.error || 'Backup failed', false);
           return;
         }
+        // Set by the server when the archive is missing state.db — hermes can
+        // now drop it and still exit 0, so a "successful" backup may not be a
+        // usable one. Surface it rather than hand over a silent partial.
+        const backupWarning = r.headers.get('x-backup-warning');
         const blob = await r.blob();
         const disposition = r.headers.get('content-disposition') || '';
         const match = disposition.match(/filename="?([^"]+)"?/);
@@ -1970,7 +2014,7 @@ function app() {
         a.href = url; a.download = filename;
         document.body.appendChild(a); a.click(); a.remove();
         URL.revokeObjectURL(url);
-        this.notify('Backup downloaded', true);
+        this.notify(backupWarning || 'Backup downloaded', !backupWarning);
       } catch (e) {
         this.notify('Backup failed: ' + e.message, false);
       }
