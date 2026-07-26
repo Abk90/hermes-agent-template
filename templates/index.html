@@ -677,17 +677,53 @@
     margin-bottom: 10px;
     letter-spacing: 0.3px;
   }
-  /* Release provenance: which branch carries this release, and the Hermes
+  /* Release provenance: which git branch carries this release, and the Hermes
      version it is pinned to. main tracks the newest; each release also keeps
-     a permanent branch so a deployment can stay on an older Hermes. */
+     a permanent release/<version> branch so a deployment can stay on an older
+     Hermes. NOTE: meta-box is inline-flex, which collapses plain whitespace
+     between children — spacing must come from `gap`, never from source spaces. */
   .changelog-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin: 0 0 12px;
+    gap: 10px;
+    margin: 0 0 14px;
   }
-  .changelog-meta .chip { display: inline-flex; align-items: center; }
-  .changelog-meta code { color: var(--text); font-size: 11px; }
+  .meta-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+  }
+  .meta-label {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .meta-box code {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--text);
+  }
+  .meta-box.version code { color: var(--green); }
+  .meta-sep { color: var(--text-dim); font-size: 11px; }
+
+  /* Grouped release notes: upstream-driven adaptations vs our own fixes. */
+  .changelog-group {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 16px 0 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .changelog-entry .changelog-group:first-of-type { margin-top: 4px; }
 
   .changelog-list { list-style: none; padding: 0; margin: 0; }
   .changelog-list li {
@@ -1589,34 +1625,55 @@
       <div class="panel-body">
 
         <div style="background:rgba(98,114,255,0.06);border:1px solid rgba(98,114,255,0.2);border-radius:8px;padding:12px 15px;margin-bottom:20px;font-size:13px;color:var(--text-dim);line-height:1.6;">
-          The <code>main</code> branch always ships the <strong style="color:var(--text);">latest</strong> Hermes release, and that is what you get by default.
-          Every release also keeps its own permanent branch, listed below. If you'd rather stay on — or roll back to — an older
-          Hermes version, point your Railway service at that branch and redeploy; it will keep working and won't move under you.
+          The <code>main</code> branch always ships the <strong style="color:var(--text);">latest</strong> Hermes release — that is what you get by default, and it moves forward with each update.
+          Every release also keeps its own permanent <code>release/&lt;version&gt;</code> branch, shown against each entry below.
+          To stay on — or roll back to — an older Hermes version, point your Railway service at that release branch and redeploy: it is frozen and will never move under you.
         </div>
 
         <div class="changelog-entry">
           <div class="changelog-date">July 27, 2026</div>
           <div class="changelog-meta">
-            <span class="chip dim">Branch <code>main</code> &nbsp;·&nbsp; <code>v2026.7.20-update</code></span>
-            <span class="chip green">Hermes v2026.7.20</span>
+            <span class="meta-box">
+              <span class="meta-label">Git branch</span>
+              <code>main</code><span class="meta-sep">·</span><code>release/v2026.7.20</code>
+            </span>
+            <span class="meta-box version">
+              <span class="meta-label">Hermes compatible version</span>
+              <code>v2026.7.20</code>
+            </span>
           </div>
+
+          <div class="changelog-group">Hermes update</div>
           <ul class="changelog-list">
             <li>Updated <strong>Hermes Agent to v2026.7.20</strong> (from v2026.7.1) — adds the new <strong>Hermes Console</strong>, session export, and three new providers: <strong>Fireworks AI</strong>, <strong>DeepInfra</strong> and <strong>Upstage Solar</strong>.</li>
-            <li>Fixed the new <strong>Hermes Console</strong> (Dashboard → System → <em>Open console</em>), which could not connect through this template.</li>
-            <li>Fixed the gateway going offline for ~10s after several quick saves during setup, while the panel still showed <em>running</em>.</li>
-            <li>Fixed the <strong>Chat</strong> tab disconnecting during long agent replies.</li>
-            <li>Fixed <strong>MCP tool-server sign-in</strong>, which returned to an unreachable address after you approved it.</li>
-            <li><strong>Backup &amp; Restore is safer:</strong> Hermes can now report success while silently leaving your chat history out of a backup. A restore is refused unless its automatic safety snapshot is complete, and downloads warn instead of quietly handing you a partial file.</li>
-            <li>Fixed revoked users being silently re-approved after restoring a backup from an older deployment.</li>
-            <li>Installing a memory provider from the dashboard now warns first — this container is rebuilt on every deploy, so anything installed at runtime is lost.</li>
-            <li>Conversation auto-reset now behaves the same on new and existing deployments, and the gateway gets longer to disconnect cleanly when stopping.</li>
+          </ul>
+
+          <div class="changelog-group">Changes to support upstream updates</div>
+          <ul class="changelog-list">
+            <li><strong>Hermes Console.</strong> Hermes added a new console connection; this template only forwards connections it explicitly knows about, so the button failed. Added it to that list.</li>
+            <li><strong>Restart throttling.</strong> Hermes added its own restart brake that paused the gateway before starting it — on top of the one this template already has. Turned Hermes' off so only ours applies; saving settings repeatedly no longer takes the bot offline.</li>
+            <li><strong>Backups.</strong> Hermes can now leave your chat history out of a backup while still reporting success. The template now checks the file itself: a restore is refused unless its automatic safety snapshot is complete, and downloads warn instead of quietly handing you a partial file.</li>
+            <li><strong>Paired users.</strong> Hermes now re-copies old pairing data on every start, which brought revoked users back. The template merges the old and new locations into one after a restore, so a revoke stays revoked.</li>
+            <li><strong>Long replies.</strong> Hermes stopped sending keep-alive pings on its internal connection; this template was still expecting them and cut Chat off mid-reply. Matched Hermes' behaviour.</li>
+            <li><strong>MCP sign-in.</strong> Hermes builds its return address from the web address it sees, which is internal behind this template's proxy. The template now tells Hermes its real public URL.</li>
+            <li><strong>Memory providers.</strong> Hermes added a button that installs software into the running container, with no check for immutable deployments. The template now warns first — anything installed this way is lost on the next deploy.</li>
+            <li><strong>Conversation auto-reset.</strong> Hermes changed its default, which would have made newly created deployments behave differently from existing ones. The template now sets it explicitly so both match.</li>
+          </ul>
+
+          <div class="changelog-group">Bug fixes</div>
+          <ul class="changelog-list">
+            <li>Fixed the <strong>Users</strong> tab reading the wrong location after a restore — pairing requests could be invisible and approvals ignored until the next restart.</li>
+            <li>Gateway shutdown now waits longer, so several connected chat platforms can disconnect cleanly instead of being cut off.</li>
           </ul>
         </div>
 
         <div class="changelog-entry">
           <div class="changelog-date">July 13, 2026</div>
           <div class="changelog-meta">
-            <span class="chip dim">Hermes v2026.7.1</span>
+            <span class="meta-box version">
+              <span class="meta-label">Hermes compatible version</span>
+              <code>v2026.7.1</code>
+            </span>
           </div>
           <ul class="changelog-list">
             <li>Added <strong>Backup &amp; Restore</strong> (under <strong>Data</strong> in the sidebar) — download a full snapshot of this deployment (config, provider keys, channel tokens, approved users, chat history, memories, skills, cron jobs) as a zip, and restore it — including into a fresh project — to clone a deployment. A safety snapshot of the current state is taken automatically before every restore.</li>
