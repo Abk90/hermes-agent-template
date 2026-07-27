@@ -34,7 +34,15 @@
     color: var(--text);
     font-family: var(--font-sans);
     font-size: 14px;
+    /* Mobile browsers resolve 100vh to the LARGE viewport (address bar
+       retracted), which is taller than what is actually on screen while the
+       bar is showing. Combined with overflow:hidden that pushed the save bar —
+       and the sidebar footer — below the fold with no way to scroll to them,
+       so "Save & Start" was unreachable on phones. dvh tracks the visible
+       viewport instead. The 100vh line stays first as the fallback for
+       browsers predating dvh (pre-2022); anything newer overrides it. */
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
