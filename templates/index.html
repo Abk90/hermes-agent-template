@@ -214,6 +214,45 @@
     margin: 8px 16px;
   }
 
+  /* Pinned-Hermes-version badge (sidebar footer). Deliberately quiet: it is
+     reference information, not an action, so it must not compete with the
+     nav items above it. Hover reveals it is clickable -> What's New. */
+  .version-badge {
+    margin: 0 12px 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--surface2);
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.15s;
+  }
+  .version-badge:hover { border-color: var(--accent); }
+  .version-badge-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .version-badge-label {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .version-badge-value {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--green);
+  }
+  .version-badge-hint {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 3px;
+  }
+  .version-badge:hover .version-badge-hint { color: var(--accent); }
+
   /* ── Main content ─────────────────────────────────── */
   #main {
     flex: 1;
@@ -954,7 +993,22 @@
       <span>Backup &amp; Restore</span>
     </div>
 
-    <div class="nav-divider" style="margin-top:auto;"></div>
+    <!-- Which Hermes release this deployment is pinned to. Lives in the
+         sidebar's flex dead-space (margin-top:auto) so it costs no layout and
+         stays visible on every tab, unlike the already-crowded header. Version
+         comes from the server (HERMES_REF), never hardcoded, so it stays true
+         when someone pins an older release. Clicking opens What's New, where
+         the per-release branch names for rolling back are listed. -->
+    <div class="version-badge" style="margin-top:auto;" @click="page='changelog'"
+         :title="'This template is built and tested against Hermes ' + (hermesVersion || 'unknown') + '. Click to see what changed and how to pin an older version.'">
+      <div class="version-badge-top">
+        <span class="version-badge-label">Hermes</span>
+        <span class="version-badge-value" x-text="hermesVersion || '—'"></span>
+      </div>
+      <div class="version-badge-hint">What's new &amp; older versions →</div>
+    </div>
+
+    <div class="nav-divider"></div>
 
     <div class="nav-item danger" @click="resetConfig()">
       <span class="nav-icon">⊘</span>
@@ -1763,6 +1817,10 @@ function app() {
     // True only when the SERVER has a persisted complete config.
     // Distinct from isSetupDone, which tracks the in-memory form.
     savedConfigComplete: false,
+    // Hermes release this image pins, reported by the server (HERMES_REF).
+    // Never hardcoded here — it must stay correct when a deployment is pinned
+    // to an older release via the Railway variable.
+    hermesVersion: '',
 
     tools,
 
@@ -2011,7 +2069,11 @@ function app() {
     async loadStatus() {
       try {
         const r = await fetch('/setup/api/status');
-        if (r.ok) { const d = await r.json(); this.status = d; this.gw = d.gateway||{}; }
+        if (r.ok) {
+          const d = await r.json();
+          this.status = d; this.gw = d.gateway||{};
+          if (d.hermes_version) this.hermesVersion = d.hermes_version;
+        }
       } catch {}
     },
 

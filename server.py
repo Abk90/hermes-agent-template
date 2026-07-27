@@ -66,6 +66,13 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 HERMES_HOME = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
 ENV_FILE = Path(HERMES_HOME) / ".env"
 
+# The Hermes release this image pins. The Dockerfile promotes its `ARG
+# HERMES_REF` to an ENV so we can read it here; a Railway service variable of
+# the same name (the documented way to pin an older release) shadows that ENV,
+# so this always reflects what actually got built rather than a hardcoded
+# string that would go stale — or worse, misreport after a deliberate rollback.
+HERMES_VERSION = os.environ.get("HERMES_REF", "").strip()
+
 
 def _resolve_pairing_dir() -> Path:
     """Locate the pairing store the same way hermes' get_hermes_dir() does.
@@ -1522,7 +1529,8 @@ async def api_status(request: Request):
         name: {"configured": bool(v := data.get(key,"")) and v.lower() not in ("false","0","no")}
         for name, key in CHANNEL_MAP.items()
     }
-    return JSONResponse({"gateway": gw.status(), "providers": providers, "channels": channels})
+    return JSONResponse({"gateway": gw.status(), "providers": providers,
+                         "channels": channels, "hermes_version": HERMES_VERSION})
 
 
 async def api_logs(request: Request):
