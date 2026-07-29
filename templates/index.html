@@ -541,6 +541,38 @@
     gap: 12px;
   }
 
+  /* ── Backup drop zone ─────────────────────────────── */
+  .dropzone {
+    display: block;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 22px 16px;
+    text-align: center;
+    cursor: pointer;
+    background: var(--bg);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dropzone:hover { border-color: var(--accent); }
+  .dropzone:focus-within { border-color: var(--accent); }
+  .dropzone.dragging {
+    border-color: var(--accent);
+    border-style: solid;
+    background: rgba(98,114,255,0.07);
+  }
+  /* Kept in the layout (not display:none) so it stays keyboard-focusable and
+     clickable natively — clipped rather than hidden. */
+  .dropzone-input {
+    position: absolute;
+    width: 1px; height: 1px;
+    opacity: 0;
+    overflow: hidden;
+  }
+  .dropzone-icon { font-size: 18px; color: var(--text-dim); margin-bottom: 6px; }
+  .dropzone-main { font-size: 13px; color: var(--text); }
+  .dropzone-link { color: var(--accent2); text-decoration: underline; }
+  .dropzone-file { font-family: var(--font-mono); font-size: 12.5px; color: var(--green); word-break: break-all; }
+  .dropzone-sub { font-size: 11.5px; color: var(--text-dim); margin-top: 5px; }
+
   /* ── Toast ────────────────────────────────────────── */
   #toast {
     position: fixed;
@@ -1559,14 +1591,34 @@
             newer user approvals) can be lost. A safety snapshot of the current state is taken
             automatically first — see below if you need to recover it.
           </p>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <input type="file" accept=".zip" @change="restoreFile = $event.target.files[0]" x-ref="restoreInput" style="display:none;">
-            <button class="btn" type="button" @click="$refs.restoreInput.click()">Choose File</button>
-            <span style="font-size:12px;color:var(--text-dim);font-family:var(--font-mono);" x-text="restoreFile ? restoreFile.name : 'No file chosen'"></span>
+          <!-- Drop zone. The file input is a real, focusable control here (not
+               a display:none input driven by a synthetic .click()) because some
+               environments — notably streamed "cloud browsers" — never surface
+               a programmatically opened file dialog, leaving no way to pick a
+               file at all. Dropping and clicking both land in the same
+               setRestoreFile(), so there is one validation path. -->
+          <label class="dropzone" :class="{dragging: restoreDragging}"
+                 @dragenter.prevent.stop="restoreDragging = true"
+                 @dragover.prevent.stop="restoreDragging = true"
+                 @dragleave.prevent.stop="restoreDragging = false"
+                 @drop.prevent.stop="restoreDragging = false; setRestoreFile($event.dataTransfer.files[0])">
+            <input type="file" accept=".zip,application/zip" x-ref="restoreInput"
+                   @change="setRestoreFile($event.target.files[0])"
+                   class="dropzone-input">
+            <div class="dropzone-icon">⬆</div>
+            <div class="dropzone-main">
+              <span x-show="!restoreFile">Drop a backup .zip here, or <span class="dropzone-link">browse</span></span>
+              <span x-show="restoreFile" class="dropzone-file" x-text="restoreFile ? restoreFile.name : ''"></span>
+            </div>
+            <div class="dropzone-sub" x-show="!restoreFile">Only .zip files created by Download Backup</div>
+            <div class="dropzone-sub" x-show="restoreFile" x-text="restoreFile ? fmtBytes(restoreFile.size) + ' — click or drop again to replace' : ''"></div>
+          </label>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;">
             <button class="btn danger" @click="restoreBackup()" :disabled="restoreBusy || !restoreFile">
               <span x-show="!restoreBusy">⬆ Upload &amp; Restore</span>
               <span x-show="restoreBusy">Restoring…</span>
             </button>
+            <button class="btn" type="button" x-show="restoreFile" @click="clearRestoreFile()">Clear</button>
           </div>
         </div>
 
@@ -1820,6 +1872,7 @@ function app() {
     backupBusy: false,
     restoreBusy: false,
     restoreFile: null,
+    restoreDragging: false,
     saving: false,
     restartOnSave: true,
     // True only when the SERVER has a persisted complete config.
@@ -1993,6 +2046,11 @@ function app() {
     },
 
     async init() {
+      // Swallow drops that miss the drop zone. Without this the browser
+      // navigates away to the dropped file, silently abandoning a half-filled
+      // setup form — and on the Backup page that looks like the restore blew up.
+      ['dragover','drop'].forEach(evt =>
+        window.addEventListener(evt, e => { e.preventDefault(); }, false));
       await Promise.all([this.loadConfig(), this.loadStatus(), this.loadLogs(), this.loadPairing(), this.loadSnapshots()]);
       setInterval(() => this.loadStatus(),  5000);
       setInterval(() => this.loadLogs(),    3000);
@@ -2159,6 +2217,26 @@ function app() {
         const r = await fetch('/setup/api/backup/snapshots');
         if (r.ok) this.snapshots = (await r.json()).snapshots || [];
       } catch {}
+    },
+
+    // Single entry point for both the drop and the file picker, so validation
+    // can't diverge between them.
+    setRestoreFile(file) {
+      if (!file) return;
+      if (!/\.zip$/i.test(file.name)) {
+        this.notify('That is not a .zip — pick the file produced by Download Backup', false);
+        return;
+      }
+      if (file.size === 0) {
+        this.notify('That file is empty', false);
+        return;
+      }
+      this.restoreFile = file;
+    },
+
+    clearRestoreFile() {
+      this.restoreFile = null;
+      if (this.$refs.restoreInput) this.$refs.restoreInput.value = '';
     },
 
     async restoreBackup() {
