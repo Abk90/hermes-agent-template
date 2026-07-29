@@ -208,6 +208,11 @@ ENV_VARS = [
     ("GLM_API_KEY",              "GLM / Z.AI",               "provider",  True),
     ("KIMI_API_KEY",             "Kimi",                     "provider",  True),
     ("MINIMAX_API_KEY",          "MiniMax",                  "provider",  True),
+    # MiniMax runs two separate platforms with separate accounts and keys:
+    # global (api.minimax.io) and China (api.minimaxi.com). Hermes ships both as
+    # first-class providers, so a CN key is a normal provider entry here — no
+    # custom-endpoint plumbing needed, and both can be configured at once.
+    ("MINIMAX_CN_API_KEY",       "MiniMax (China)",          "provider",  True),
     ("HF_TOKEN",                 "Hugging Face",             "provider",  True),
     # Added in v2026.4.23+ (hermes v0.11.0+). All plain API-key auth — hermes
     # auto-routes by env-var presence, no extra config needed on our side.
@@ -270,6 +275,8 @@ ENV_VARS = [
 
 SECRET_KEYS  = {k for k, _, _, s in ENV_VARS if s}
 PROVIDER_KEYS = [k for k, _, c, _ in ENV_VARS if c == "provider"]
+# Display names for the admin UI, straight from the registry above.
+ENV_LABELS = {k: l for k, l, _, _ in ENV_VARS}
 
 # Maps our own provider-key env var to hermes' OWN canonical provider id
 # (hermes_cli/auth.py PROVIDER_REGISTRY, verified against v2026.7.1). Used by
@@ -287,6 +294,7 @@ HERMES_PROVIDER_IDS = {
     "GLM_API_KEY":           "zai",           # "Z.AI / GLM"
     "KIMI_API_KEY":          "kimi-coding",
     "MINIMAX_API_KEY":       "minimax",
+    "MINIMAX_CN_API_KEY":    "minimax-cn",    # China platform (api.minimaxi.com)
     "HF_TOKEN":              "huggingface",
     "NVIDIA_API_KEY":        "nvidia",
     "ARCEEAI_API_KEY":       "arcee",
@@ -1520,8 +1528,12 @@ async def api_config_put(request: Request):
 async def api_status(request: Request):
     if err := guard(request): return err
     data = read_env(ENV_FILE)
+    # Label from the ENV_VARS registry rather than munging the env-var name.
+    # Deriving it produced things like "Minimax Cn" and "Glm" while the registry
+    # already carries the proper display name; a new provider now reads correctly
+    # on the Status page without another string-replace being bolted on here.
     providers = {
-        k.replace("_API_KEY","").replace("_TOKEN","").replace("HF_","HuggingFace ").replace("_"," ").title():
+        (ENV_LABELS.get(k) or k.replace("_API_KEY", "").replace("_TOKEN", "").replace("_", " ").title()):
         {"configured": bool(data.get(k))}
         for k in PROVIDER_KEYS
     }
