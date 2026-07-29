@@ -1213,13 +1213,15 @@
                      : selectedProvider === 'Anthropic (Claude)' ? 'e.g. claude-sonnet-4-20250514'
                      : selectedProvider === 'AWS Bedrock' ? 'e.g. anthropic.claude-3-5-sonnet-20241022-v2:0'
                      : selectedProvider === 'Fireworks AI' ? 'e.g. accounts/fireworks/models/llama-v3p1-70b-instruct'
+                     : selectedProvider === 'MiniMax' || selectedProvider === 'MiniMax (China)' ? 'e.g. MiniMax-M3'
                      : selectedProvider === 'Custom Endpoint' || selectedProvider === 'Azure Foundry' ? 'model-id as required by the endpoint'
                      : 'e.g. openai/gpt-4o-mini  or  deepseek/deepseek-chat'">
             <p class="hint" x-show="selectedProvider === 'xAI Grok (SuperGrok)' || selectedProvider === 'xAI'">e.g. <code>grok-4.3</code>, <code>grok-4.20-0309-reasoning</code></p>
             <p class="hint" x-show="selectedProvider === 'Anthropic (Claude)'">e.g. <code>claude-sonnet-4-20250514</code>, <code>claude-opus-4-20250115</code></p>
             <p class="hint" x-show="selectedProvider === 'AWS Bedrock'">e.g. <code>anthropic.claude-3-5-sonnet-20241022-v2:0</code>, <code>us.meta.llama3-2-90b-instruct-v1:0</code></p>
             <p class="hint" x-show="selectedProvider === 'Fireworks AI'">Format: <code>accounts/fireworks/models/&lt;model-id&gt;</code></p>
-            <p class="hint" x-show="!['xAI Grok (SuperGrok)','xAI','Anthropic (Claude)','AWS Bedrock','Fireworks AI','Custom Endpoint','Azure Foundry'].includes(selectedProvider) && selectedProvider">Check your provider's docs for model names. OpenRouter format: <code>provider/model-name</code></p>
+            <p class="hint" x-show="selectedProvider === 'MiniMax' || selectedProvider === 'MiniMax (China)'">e.g. <code>MiniMax-M3</code>, <code>MiniMax-M2.7</code></p>
+            <p class="hint" x-show="!['xAI Grok (SuperGrok)','xAI','Anthropic (Claude)','AWS Bedrock','Fireworks AI','MiniMax','MiniMax (China)','Custom Endpoint','Azure Foundry'].includes(selectedProvider) && selectedProvider">Check your provider's docs for model names. OpenRouter format: <code>provider/model-name</code></p>
           </div>
         </div>
 
@@ -1828,6 +1830,7 @@
           <div class="changelog-group">Improvements</div>
           <ul class="changelog-list">
             <li><strong>Backup restore</strong> — drag a .zip straight onto the Restore box, and see the outcome (success, warning, or why it failed) in the box itself rather than a brief pop-up.</li>
+            <li><strong>MiniMax (China)</strong> is now in the provider dropdown alongside the global one — separate platforms with separate keys, so you can set up either or both. Model hints added for both.</li>
           </ul>
         </div>
 
@@ -1980,6 +1983,10 @@ function app() {
       'GLM / Z.AI':           { key: 'GLM_API_KEY',         modelKey: '_MODEL_GLM_API_KEY',         placeholder: ''          },
       'Kimi':                 { key: 'KIMI_API_KEY',         modelKey: '_MODEL_KIMI_API_KEY',        placeholder: ''          },
       'MiniMax':              { key: 'MINIMAX_API_KEY',      modelKey: '_MODEL_MINIMAX_API_KEY',     placeholder: ''          },
+      // MiniMax's China platform is a separate account and key from the global
+      // one (hermes provider id "minimax-cn"). Listed separately so both can be
+      // configured at the same time and switched between like any other pair.
+      'MiniMax (China)':      { key: 'MINIMAX_CN_API_KEY',   modelKey: '_MODEL_MINIMAX_CN_API_KEY', placeholder: ''          },
       'HuggingFace':          { key: 'HF_TOKEN',             modelKey: '_MODEL_HF_TOKEN',            placeholder: 'hf_...'   },
       'NVIDIA NIM':           { key: 'NVIDIA_API_KEY',       modelKey: '_MODEL_NVIDIA_API_KEY',      placeholder: 'nvapi-...' },
       'NovitaAI':             { key: 'NOVITA_API_KEY',       modelKey: '_MODEL_NOVITA_API_KEY',      placeholder: ''          },

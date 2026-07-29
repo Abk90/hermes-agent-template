@@ -23,6 +23,9 @@ release.
 - **Backup restore** — a .zip can be dragged onto the Restore box, and the
   outcome (success / warning / failure reason) now shows in the box rather than
   only as a brief toast.
+- **MiniMax (China)** added to the provider dropdown alongside the global one.
+  They are separate MiniMax platforms with separate keys, so both can be
+  configured at once. Model hints (`MiniMax-M3`, `MiniMax-M2.7`) added for both.
 
 ---
 
