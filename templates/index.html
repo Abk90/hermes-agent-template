@@ -573,6 +573,23 @@
   .dropzone-file { font-family: var(--font-mono); font-size: 12.5px; color: var(--green); word-break: break-all; }
   .dropzone-sub { font-size: 11.5px; color: var(--text-dim); margin-top: 5px; }
 
+  /* Inline restore outcome — the toast is easy to miss after a long restore. */
+  .restore-result {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin-top: 12px;
+    padding: 10px 13px;
+    border-radius: 7px;
+    font-size: 13px;
+    line-height: 1.5;
+    animation: slideIn 0.2s ease;
+  }
+  .restore-result-icon { font-family: var(--font-mono); font-weight: 600; line-height: 1.4; }
+  .restore-result.ok   { background: rgba(63,185,80,0.10);  border: 1px solid rgba(63,185,80,0.35);  color: var(--green); }
+  .restore-result.warn { background: rgba(210,153,34,0.10); border: 1px solid rgba(210,153,34,0.35); color: var(--yellow); }
+  .restore-result.err  { background: rgba(248,81,73,0.09);  border: 1px solid rgba(248,81,73,0.35);  color: var(--red); }
+
   /* ── Toast ────────────────────────────────────────── */
   #toast {
     position: fixed;
@@ -767,6 +784,8 @@
     gap: 10px;
     margin: 0 0 14px;
   }
+  /* Release identity lives in the branch name itself (release/<hermes>/<n>),
+     so entries carry no separate major/minor badge. */
   .meta-box {
     display: inline-flex;
     align-items: center;
@@ -1620,6 +1639,11 @@
             </button>
             <button class="btn" type="button" x-show="restoreFile" @click="clearRestoreFile()">Clear</button>
           </div>
+          <div class="restore-result" x-show="restoreResult" x-cloak
+               :class="restoreResult && restoreResult.ok ? 'ok' : (restoreResult && restoreResult.warn ? 'warn' : 'err')">
+            <span class="restore-result-icon" x-text="restoreResult && restoreResult.ok ? '✓' : (restoreResult && restoreResult.warn ? '!' : '✕')"></span>
+            <span x-text="restoreResult ? restoreResult.msg : ''"></span>
+          </div>
         </div>
 
         <div class="section-label" style="margin-top:20px;">Safety Snapshots</div>
@@ -1739,9 +1763,41 @@
       <div class="panel-body">
 
         <div style="background:rgba(98,114,255,0.06);border:1px solid rgba(98,114,255,0.2);border-radius:8px;padding:12px 15px;margin-bottom:20px;font-size:13px;color:var(--text-dim);line-height:1.6;">
-          The <code>main</code> branch always ships the <strong style="color:var(--text);">latest</strong> Hermes release — that is what you get by default, and it moves forward with each update.
-          Every release also keeps its own permanent <code>release/&lt;version&gt;</code> branch, shown against each entry below.
-          To stay on — or roll back to — an older Hermes version, point your Railway service at that release branch and redeploy: it is frozen and will never move under you.
+          <div style="margin-bottom:8px;">
+            <code>main</code> always ships the <strong style="color:var(--text);">latest</strong> release — that is what you get by default.
+            To stay on, or roll back to, a particular Hermes version, point your Railway service at that release's branch and redeploy.
+          </div>
+          <div>
+            Release branches are named <code>release/&lt;hermes-version&gt;/&lt;n&gt;</code>.
+            <code>/1</code> is where that Hermes version first landed; <code>/2</code>, <code>/3</code> and so on are
+            template-only fixes and improvements on top of it — the Hermes version never changes within a series.
+            <strong style="color:var(--text);">Pick the highest number</strong> for the Hermes version you want; each branch stays put once published.
+          </div>
+        </div>
+
+        <div class="changelog-entry">
+          <div class="changelog-date">July 30, 2026</div>
+          <div class="changelog-meta">
+            <span class="meta-box">
+              <span class="meta-label">Git branch</span>
+              <code>release/v2026.7.20/2</code>
+            </span>
+            <span class="meta-box version">
+              <span class="meta-label">Hermes compatible version</span>
+              <code>v2026.7.20</code>
+            </span>
+          </div>
+
+          <div class="changelog-group">Bug fixes</div>
+          <ul class="changelog-list">
+            <li>Fixed <strong>Choose file</strong> doing nothing when restoring a backup on streamed "cloud" browsers, which never show the file dialog the old picker relied on (<a href="https://github.com/praveen-ks-2001/hermes-agent-template/issues/76" target="_blank" rel="noopener" style="color:var(--accent2);">#76</a>).</li>
+          </ul>
+
+          <div class="changelog-group">Improvements</div>
+          <ul class="changelog-list">
+            <li>You can now <strong>drag a backup .zip</strong> onto the Restore box instead of browsing for it. Wrong file types are rejected without losing the one you already picked.</li>
+            <li>Restoring now shows a clear result in the Restore box — success, warning, or the reason it failed — instead of only a brief pop-up.</li>
+          </ul>
         </div>
 
         <div class="changelog-entry">
@@ -1749,7 +1805,7 @@
           <div class="changelog-meta">
             <span class="meta-box">
               <span class="meta-label">Git branch</span>
-              <code>main</code><span class="meta-sep">·</span><code>release/v2026.7.20</code>
+              <code>release/v2026.7.20/1</code>
             </span>
             <span class="meta-box version">
               <span class="meta-label">Hermes compatible version</span>
@@ -1873,6 +1929,7 @@ function app() {
     restoreBusy: false,
     restoreFile: null,
     restoreDragging: false,
+    restoreResult: null,
     saving: false,
     restartOnSave: true,
     // True only when the SERVER has a persisted complete config.
@@ -2250,16 +2307,34 @@ function app() {
         const d = await r.json().catch(() => ({}));
         if (r.ok) {
           this.notify(d.warning ? `Restored, but: ${d.warning}` : 'Restore complete', !d.warning);
+          this.setRestoreResult(d.warning
+            ? { ok: false, warn: true, msg: `Restored, but: ${d.warning}` }
+            : { ok: true, msg: 'Restore complete — your config and data were replaced and the gateway restarted.' });
           this.restoreFile = null;
           if (this.$refs.restoreInput) this.$refs.restoreInput.value = '';
           await Promise.all([this.loadConfig(), this.loadStatus(), this.loadSnapshots()]);
         } else {
           this.notify(d.error || 'Restore failed', false);
+          this.setRestoreResult({ ok: false, msg: d.error || 'Restore failed' });
         }
       } catch (e) {
         this.notify('Restore failed: ' + e.message, false);
+        this.setRestoreResult({ ok: false, msg: 'Restore failed: ' + e.message });
       }
       this.restoreBusy = false;
+    },
+
+    // Inline outcome shown in the Restore card. The toast alone is easy to miss:
+    // a restore can take a while, and a 3s message in the corner is gone by the
+    // time you look back — leaving no sign anything happened. Success clears
+    // itself; failures and warnings stay put until the next attempt, because a
+    // message you never read is the same as no message.
+    setRestoreResult(res) {
+      clearTimeout(this._restoreResultTimer);
+      this.restoreResult = res;
+      if (res && res.ok) {
+        this._restoreResultTimer = setTimeout(() => { this.restoreResult = null; }, 6000);
+      }
     },
 
     fmtBytes(n) {
