@@ -759,12 +759,44 @@
   .header-branding a:hover { color: var(--accent); }
 
   /* ── Changelog ────────────────────────────────────── */
+  /* Timeline. The left rule runs continuously through every entry; the dot
+     marks the release type — filled accent for a Hermes upgrade (/1), hollow
+     for the template-only follow-ups (/2, /3 …). Everything under the date is
+     indented off the same edge so dates align down one axis and content down
+     another. */
   .changelog-entry {
-    margin-bottom: 24px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--border);
+    position: relative;
+    padding: 0 0 26px 22px;
+    border-left: 1px solid var(--border);
   }
-  .changelog-entry:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+  .changelog-entry:last-child {
+    padding-bottom: 4px;
+    border-left-color: transparent;
+  }
+  .changelog-entry::before {
+    content: '';
+    position: absolute;
+    left: -5.5px;
+    top: 4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    box-sizing: border-box;
+  }
+  /* Hermes version upgrade — the one worth reading before you update. */
+  .changelog-entry.major::before {
+    background: var(--accent);
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 0 3px rgba(98,114,255,0.16);
+  }
+  /* Template-only fixes on the same Hermes version. */
+  .changelog-entry.minor::before {
+    background: var(--surface);
+    border: 2px solid var(--text-dim);
+  }
+  /* Content sits one step in from the date, so the eye gets date -> detail. */
+  .changelog-entry .changelog-group,
+  .changelog-entry .changelog-list { margin-left: 13px; }
   .changelog-date {
     font-family: var(--font-mono);
     font-size: 13px;
@@ -1775,7 +1807,7 @@
           </div>
         </div>
 
-        <div class="changelog-entry">
+        <div class="changelog-entry minor">
           <div class="changelog-date">July 30, 2026</div>
           <div class="changelog-meta">
             <span class="meta-box">
@@ -1795,12 +1827,11 @@
 
           <div class="changelog-group">Improvements</div>
           <ul class="changelog-list">
-            <li>You can now <strong>drag a backup .zip</strong> onto the Restore box instead of browsing for it. Wrong file types are rejected without losing the one you already picked.</li>
-            <li>Restoring now shows a clear result in the Restore box — success, warning, or the reason it failed — instead of only a brief pop-up.</li>
+            <li><strong>Backup restore</strong> — drag a .zip straight onto the Restore box, and see the outcome (success, warning, or why it failed) in the box itself rather than a brief pop-up.</li>
           </ul>
         </div>
 
-        <div class="changelog-entry">
+        <div class="changelog-entry major">
           <div class="changelog-date">July 27, 2026</div>
           <div class="changelog-meta">
             <span class="meta-box">
@@ -1837,7 +1868,7 @@
           </ul>
         </div>
 
-        <div class="changelog-entry">
+        <div class="changelog-entry major">
           <div class="changelog-date">July 13, 2026</div>
           <div class="changelog-meta">
             <!-- Predates the release/<version> convention, so it keeps its
