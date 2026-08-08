@@ -1836,6 +1836,11 @@
             <li><strong>Unexpected restart during very heavy tasks.</strong> Hermes added a watchdog that restarts the gateway if it stops responding for about two minutes. Kept on — this template already restarts the gateway cleanly — but a genuinely heavy task can now end in a restart rather than a reply.</li>
             <li><strong>Build pinned against upstream's new checks.</strong> Hermes now fails the build outright on the wrong Node.js version and blocks non-editable installs; both are pinned and documented so a future change can't quietly break the image.</li>
           </ul>
+
+          <div class="changelog-group">Improvements</div>
+          <ul class="changelog-list">
+            <li><strong>The "this won't survive a redeploy" notice now also covers the Tools tab.</strong> Installing a toolset from the dashboard wipes on the next deploy just like a memory provider, but used to warn you about neither — only the provider button did. Both now warn, and re-installing still restores everything, since your settings and keys live on the volume.</li>
+          </ul>
         </div>
 
         <div class="changelog-entry minor">

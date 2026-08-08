@@ -1978,25 +1978,23 @@ BACK_TO_SETUP_WIDGET = (
     '</div>'
 )
 
-_MEMORY_PROVIDER_SETUP_RE = re.compile(r"^/api/memory/providers/[^/]+/setup$")
+# Dashboard actions that install into the running container. Tools -> post-setup
+# (hermes_cli/web_routers/tools.py) npm/pip-installs into /opt/hermes-agent and
+# is just as ephemeral as the memory-provider path, but shipped with no warning.
+# MCP catalog install is deliberately NOT here: it installs under
+# $HERMES_HOME/mcp-installs on the volume, so it does survive a redeploy.
+_IN_CONTAINER_INSTALL_RE = re.compile(
+    r"^/api/(?:memory/providers/[^/]+/setup|tools/toolsets/[^/]+/post-setup)$"
+)
 
-# Warn before any dashboard action that installs software into the RUNNING
-# container. v2026.7.20 added POST /api/memory/providers/<name>/setup
-# (hermes_cli/web_server.py), which pip-installs — and for some providers runs
-# the plugin manifest's `install` shell command — inside this process's
-# filesystem. Unlike the "Update Hermes" button it carries NO install-method
-# check, so the `.install_method=docker` stamp (invariant 4) does not refuse it.
-# On Railway the image is immutable: whatever it installs disappears on the next
-# redeploy while config.yaml still names the provider, and the agent then fails
-# to initialise it. Only the PACKAGE is lost — the endpoint installs pip/external
-# deps and writes no config; provider settings go through PUT
-# /api/memory/providers/<name>/config, which lands in config.yaml + .env on the
-# volume. So re-running the install fully restores the provider, which is why the
-# notice says so rather than implying the setup has to be redone. We warn instead of blocking so the action stays available for
-# a quick trial, and point the user at a GitHub issue rather than at the
-# Dockerfile — most people deploy this template from Railway without a fork, so
-# "edit the Dockerfile" is not an action they can take. Remove this shim if
-# upstream ever gates the endpoint itself.
+# Warn before any dashboard action that installs into the RUNNING container.
+# Neither endpoint carries an install-method check, so the `.install_method=docker`
+# stamp (invariant 4) does not refuse them, and on Railway the image is immutable:
+# the package disappears on the next redeploy while config.yaml still names it.
+# Only the PACKAGE is lost — settings live in config.yaml/.env on the volume — so
+# re-running the install fully restores it, which is what the notice says. We warn
+# rather than block so a quick trial stays possible, and point at a GitHub issue
+# rather than the Dockerfile, since most people deploy this without a fork.
 IMMUTABLE_INSTALL_WARNING_JS = (
     '<script>(function(){'
     'var f=window.fetch;if(!f||window.__hermesImmutableWarn)return;'
@@ -2004,17 +2002,17 @@ IMMUTABLE_INSTALL_WARNING_JS = (
     'window.fetch=function(input,init){try{'
     'var u=(typeof input==="string")?input:(input&&input.url)||"";'
     'var m=((init&&init.method)||(input&&input.method)||"GET").toUpperCase();'
-    'if(m==="POST"&&/\\/api\\/memory\\/providers\\/[^\\/]+\\/setup/.test(u)&&'
+    'if(m==="POST"&&/\\/api\\/(memory\\/providers\\/[^\\/]+\\/setup|tools\\/toolsets\\/[^\\/]+\\/post-setup)/.test(u)&&'
     '!window.confirm("MESSAGE FROM THE TEMPLATE CREATOR\\n'
     '----------------------------------------\\n\\n'
     'This template is deployed on Railway as an immutable container: the image is '
     'rebuilt from scratch on every deploy, so anything installed into the running '
     'container is wiped.\\n\\n'
-    'Installing this provider will work right now, but only until your next '
-    'deploy. After that it stays configured while its package is gone, and the '
-    'agent fails to start it.\\n\\n'
-    'If that happens, just install it again from here — your provider settings '
-    'and API keys are stored on the Railway volume, not inside the container, so '
+    'Installing this will work right now, but only until your next deploy. '
+    'After that it stays configured while its package is gone, and the agent '
+    'fails to start it.\\n\\n'
+    'If that happens, just install it again from here — your settings and API '
+    'keys are stored on the Railway volume, not inside the container, so '
     'nothing needs reconfiguring and it resumes where it left off.\\n\\n'
     'To have it included permanently, please raise an issue here:\\n'
     'https://github.com/praveen-ks-2001/hermes-agent-template/issues\\n\\n'
@@ -2143,7 +2141,7 @@ async def route_proxy(request: Request) -> Response:
     # the confirm() from IMMUTABLE_INSTALL_WARNING_JS, but this is the only
     # record in `railway logs` explaining why a provider works now and breaks
     # after the next redeploy.
-    if request.method == "POST" and _MEMORY_PROVIDER_SETUP_RE.match(request.url.path):
+    if request.method == "POST" and _IN_CONTAINER_INSTALL_RE.match(request.url.path):
         print(f"[proxy] in-container install requested: {request.url.path} — "
               f"immutable image, this will not survive a redeploy", flush=True)
     return await _proxy_to_dashboard(request)

@@ -44,6 +44,12 @@ release.
   a new `setup.py` blocks non-editable installs, making the Dockerfile's `-e`
   load-bearing. Both documented in place.
 
+### Improvements
+- **Install warning now covers the Tools tab.** `POST /api/tools/toolsets/<name>/post-setup`
+  installs into the container exactly like the memory-provider button but
+  shipped with no notice. Both now warn, and both are logged. MCP catalog
+  installs are deliberately excluded — those land on the volume and do survive.
+
 ---
 
 ## release/v2026.7.20/2 — July 30, 2026
