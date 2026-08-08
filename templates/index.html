@@ -1809,6 +1809,40 @@
           </div>
         </div>
 
+        <div class="changelog-entry major">
+          <div class="changelog-date">August 8, 2026</div>
+          <div class="changelog-meta">
+            <span class="meta-box">
+              <span class="meta-label">Git branch</span>
+              <code>release/v2026.8.3/1</code>
+            </span>
+            <span class="meta-box version">
+              <span class="meta-label">Hermes compatible version</span>
+              <code>v2026.8.3</code>
+            </span>
+          </div>
+
+          <div class="changelog-group">Hermes update</div>
+          <ul class="changelog-list">
+            <li>Updated <strong>Hermes Agent to v2026.8.3</strong> (from v2026.7.20, covering two upstream releases) — adds video generation tools, the <strong>Vercel AI Gateway</strong> and <strong>Vertex</strong> providers, outbound webhooks, and gateway health monitoring.</li>
+            <li><strong>Fewer out-of-memory restarts</strong> — Hermes now returns unused memory to the system as it runs, which directly targets the crashes that hit long-running bots.</li>
+            <li><strong>An interrupted message is retried automatically.</strong> If your bot is killed mid-answer (an out-of-memory crash, or a redeploy), Hermes now re-runs that message when it comes back instead of losing it. Left enabled — but if the message asked for something with real-world side effects, it will be carried out a second time.</li>
+          </ul>
+
+          <div class="changelog-group">Changes to support upstream updates</div>
+          <ul class="changelog-list">
+            <li><strong>Restart no longer parks the bot.</strong> Hermes changed <code>/restart</code> to wait for the current task to finish first — up to <strong>six hours</strong> — and during that wait the bot stays online, shows as healthy, and refuses every message. Restored to restarting straight away, as it did before.</li>
+            <li><strong>Long replies and large output no longer cut the Chat tab.</strong> Hermes raised its WebSocket message limit to 384&nbsp;MB while this proxy still stopped at 1&nbsp;MB, so anything bigger silently dropped the connection mid-message with no error anywhere. Both ends now match.</li>
+            <li><strong>Unexpected restart during very heavy tasks.</strong> Hermes added a watchdog that restarts the gateway if it stops responding for about two minutes. Kept on — this template already restarts the gateway cleanly — but a genuinely heavy task can now end in a restart rather than a reply.</li>
+            <li><strong>Build pinned against upstream's new checks.</strong> Hermes now fails the build outright on the wrong Node.js version and blocks non-editable installs; both are pinned and documented so a future change can't quietly break the image.</li>
+          </ul>
+
+          <div class="changelog-group">Improvements</div>
+          <ul class="changelog-list">
+            <li><strong>The "this won't survive a redeploy" notice now also covers the Tools tab.</strong> Installing a toolset from the dashboard wipes on the next deploy just like a memory provider, but used to warn you about neither — only the provider button did. Both now warn, and re-installing still restores everything, since your settings and keys live on the volume.</li>
+          </ul>
+        </div>
+
         <div class="changelog-entry minor">
           <div class="changelog-date">July 30, 2026</div>
           <div class="changelog-meta">

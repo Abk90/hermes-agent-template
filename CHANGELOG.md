@@ -11,6 +11,47 @@ release.
 
 ---
 
+## release/v2026.8.3/1 — August 8, 2026
+**Hermes v2026.8.3 · major (Hermes upgrade, from v2026.7.20)**
+
+### Hermes update
+- Hermes Agent **v2026.7.20 → v2026.8.3**, covering two upstream releases
+  (v2026.7.30 and v2026.8.3) — adds video generation tools, the Vercel AI
+  Gateway and Vertex providers, outbound webhooks, and gateway health
+  monitoring.
+- **Fewer out-of-memory restarts** — Hermes now returns unused memory to the OS
+  as it runs (`agent.memory_trim`, on by default).
+- **An interrupted message is retried automatically** — a turn killed mid-answer
+  by an OOM or a redeploy is re-run on the next boot. Left enabled; a message
+  with real-world side effects will therefore be carried out twice.
+
+### Changes to support upstream updates
+- **Restart no longer parks the bot** — upstream added
+  `agent.restart_after_turn_timeout` (default 21600s) so `/restart` defers until
+  the active turn finishes. A wedged turn leaves the bot alive, healthy and
+  refusing every message for up to six hours, invisibly to the supervisor.
+  `HERMES_RESTART_AFTER_TURN_TIMEOUT=0` restores the immediate drain; it covers
+  the in-band `/restart`, SIGUSR1 and the dashboard's own detached restart.
+- **WebSocket frame size matched** — upstream set `ws_max_size` to 384 MB while
+  both of our hops sat on lower library defaults (1 MB inbound from hermes,
+  16 MB from the browser), so oversized frames dropped the Chat/PTY socket with
+  nothing in the logs. Mirrored on both legs.
+- **Loop watchdog kept on** — upstream's new watchdog exits 75 after ~2 min of a
+  stalled event loop. Deliberately left enabled: the supervisor already treats
+  exit 75 as a clean restart. Note it can now end a very long turn.
+- **Build pinned** — upstream's new `.npmrc` sets `engine-strict=true`, turning
+  the Node/npm engine range into a hard build failure (stay on setup_22.x), and
+  a new `setup.py` blocks non-editable installs, making the Dockerfile's `-e`
+  load-bearing. Both documented in place.
+
+### Improvements
+- **Install warning now covers the Tools tab.** `POST /api/tools/toolsets/<name>/post-setup`
+  installs into the container exactly like the memory-provider button but
+  shipped with no notice. Both now warn, and both are logged. MCP catalog
+  installs are deliberately excluded — those land on the volume and do survive.
+
+---
+
 ## release/v2026.7.20/2 — July 30, 2026
 **Hermes v2026.7.20 · minor**
 

@@ -560,6 +560,13 @@ def build_hermes_env() -> dict[str, str]:
     # <= 0 skips the check and the ledger write entirely. setdefault so a
     # Railway service variable or .env can still re-enable it.
     env.setdefault("HERMES_GATEWAY_MAX_STARTS", "0")
+    # v2026.8.3's `agent.restart_after_turn_timeout` (default 21600) makes
+    # /restart wait for the active turn, so a wedged turn leaves the bot alive,
+    # /health 200 and refusing every message for up to 6h. `0` is upstream's
+    # documented disable and restores v2026.7.20's immediate drain. Read before
+    # config.yaml, and inherited by all three restart paths (in-band, SIGUSR1,
+    # and the dashboard's detached restart). setdefault: set e.g. 120 to re-arm.
+    env.setdefault("HERMES_RESTART_AFTER_TURN_TIMEOUT", "0")
     return env
 
 
@@ -1971,25 +1978,23 @@ BACK_TO_SETUP_WIDGET = (
     '</div>'
 )
 
-_MEMORY_PROVIDER_SETUP_RE = re.compile(r"^/api/memory/providers/[^/]+/setup$")
+# Dashboard actions that install into the running container. Tools -> post-setup
+# (hermes_cli/web_routers/tools.py) npm/pip-installs into /opt/hermes-agent and
+# is just as ephemeral as the memory-provider path, but shipped with no warning.
+# MCP catalog install is deliberately NOT here: it installs under
+# $HERMES_HOME/mcp-installs on the volume, so it does survive a redeploy.
+_IN_CONTAINER_INSTALL_RE = re.compile(
+    r"^/api/(?:memory/providers/[^/]+/setup|tools/toolsets/[^/]+/post-setup)$"
+)
 
-# Warn before any dashboard action that installs software into the RUNNING
-# container. v2026.7.20 added POST /api/memory/providers/<name>/setup
-# (hermes_cli/web_server.py), which pip-installs — and for some providers runs
-# the plugin manifest's `install` shell command — inside this process's
-# filesystem. Unlike the "Update Hermes" button it carries NO install-method
-# check, so the `.install_method=docker` stamp (invariant 4) does not refuse it.
-# On Railway the image is immutable: whatever it installs disappears on the next
-# redeploy while config.yaml still names the provider, and the agent then fails
-# to initialise it. Only the PACKAGE is lost — the endpoint installs pip/external
-# deps and writes no config; provider settings go through PUT
-# /api/memory/providers/<name>/config, which lands in config.yaml + .env on the
-# volume. So re-running the install fully restores the provider, which is why the
-# notice says so rather than implying the setup has to be redone. We warn instead of blocking so the action stays available for
-# a quick trial, and point the user at a GitHub issue rather than at the
-# Dockerfile — most people deploy this template from Railway without a fork, so
-# "edit the Dockerfile" is not an action they can take. Remove this shim if
-# upstream ever gates the endpoint itself.
+# Warn before any dashboard action that installs into the RUNNING container.
+# Neither endpoint carries an install-method check, so the `.install_method=docker`
+# stamp (invariant 4) does not refuse them, and on Railway the image is immutable:
+# the package disappears on the next redeploy while config.yaml still names it.
+# Only the PACKAGE is lost — settings live in config.yaml/.env on the volume — so
+# re-running the install fully restores it, which is what the notice says. We warn
+# rather than block so a quick trial stays possible, and point at a GitHub issue
+# rather than the Dockerfile, since most people deploy this without a fork.
 IMMUTABLE_INSTALL_WARNING_JS = (
     '<script>(function(){'
     'var f=window.fetch;if(!f||window.__hermesImmutableWarn)return;'
@@ -1997,17 +2002,17 @@ IMMUTABLE_INSTALL_WARNING_JS = (
     'window.fetch=function(input,init){try{'
     'var u=(typeof input==="string")?input:(input&&input.url)||"";'
     'var m=((init&&init.method)||(input&&input.method)||"GET").toUpperCase();'
-    'if(m==="POST"&&/\\/api\\/memory\\/providers\\/[^\\/]+\\/setup/.test(u)&&'
+    'if(m==="POST"&&/\\/api\\/(memory\\/providers\\/[^\\/]+\\/setup|tools\\/toolsets\\/[^\\/]+\\/post-setup)/.test(u)&&'
     '!window.confirm("MESSAGE FROM THE TEMPLATE CREATOR\\n'
     '----------------------------------------\\n\\n'
     'This template is deployed on Railway as an immutable container: the image is '
     'rebuilt from scratch on every deploy, so anything installed into the running '
     'container is wiped.\\n\\n'
-    'Installing this provider will work right now, but only until your next '
-    'deploy. After that it stays configured while its package is gone, and the '
-    'agent fails to start it.\\n\\n'
-    'If that happens, just install it again from here — your provider settings '
-    'and API keys are stored on the Railway volume, not inside the container, so '
+    'Installing this will work right now, but only until your next deploy. '
+    'After that it stays configured while its package is gone, and the agent '
+    'fails to start it.\\n\\n'
+    'If that happens, just install it again from here — your settings and API '
+    'keys are stored on the Railway volume, not inside the container, so '
     'nothing needs reconfiguring and it resumes where it left off.\\n\\n'
     'To have it included permanently, please raise an issue here:\\n'
     'https://github.com/praveen-ks-2001/hermes-agent-template/issues\\n\\n'
@@ -2136,7 +2141,7 @@ async def route_proxy(request: Request) -> Response:
     # the confirm() from IMMUTABLE_INSTALL_WARNING_JS, but this is the only
     # record in `railway logs` explaining why a provider works now and breaks
     # after the next redeploy.
-    if request.method == "POST" and _MEMORY_PROVIDER_SETUP_RE.match(request.url.path):
+    if request.method == "POST" and _IN_CONTAINER_INSTALL_RE.match(request.url.path):
         print(f"[proxy] in-container install requested: {request.url.path} — "
               f"immutable image, this will not survive a redeploy", flush=True)
     return await _proxy_to_dashboard(request)
@@ -2217,6 +2222,13 @@ async def lifespan(app):
 #     fetches that token via /api/auth/session-token and includes it in the
 #     WS URL, so we just forward path + query verbatim.
 PROXIED_WS_PATHS = ("/api/pty", "/api/ws", "/api/events", "/api/console", "/api/plugins/*")
+
+# Mirrors hermes' own ws_max_size (v2026.8.3, web_server.py:362) so this proxy
+# is never the narrow end. Our hops default lower — 1 MiB inbound from hermes,
+# 16 MiB from the browser — and an oversized frame just closes the socket, so
+# Chat/PTY vanishes mid-message with nothing in the logs. Same "both ends must
+# agree" trap as the keepalive pairing below. A cap, not a preallocation.
+HERMES_WS_MAX_BYTES = 384 * 1024 * 1024
 
 
 async def _ws_pump_client_to_upstream(
@@ -2310,6 +2322,8 @@ async def ws_proxy(websocket: WebSocket) -> None:
             # pumps), and the browser-facing hop keeps uvicorn's own ping.
             ping_interval=None,
             ping_timeout=None,
+            # hermes -> us leg: the narrower hop, 1 MiB by default.
+            max_size=HERMES_WS_MAX_BYTES,
             # Don't forward client cookies/headers — hermes WS auth is
             # purely token-based via the URL, and forwarding random
             # headers risks future upstream surprises.
@@ -2425,7 +2439,9 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8080"))
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info", loop="asyncio")
+    # ws_max_size: browser -> us leg of the same pairing (uvicorn defaults 16 MiB).
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info", loop="asyncio",
+                            ws_max_size=HERMES_WS_MAX_BYTES)
     server = uvicorn.Server(config)
 
     def _shutdown():
