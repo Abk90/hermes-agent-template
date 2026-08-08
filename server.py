@@ -560,6 +560,13 @@ def build_hermes_env() -> dict[str, str]:
     # <= 0 skips the check and the ledger write entirely. setdefault so a
     # Railway service variable or .env can still re-enable it.
     env.setdefault("HERMES_GATEWAY_MAX_STARTS", "0")
+    # v2026.8.3's `agent.restart_after_turn_timeout` (default 21600) makes
+    # /restart wait for the active turn, so a wedged turn leaves the bot alive,
+    # /health 200 and refusing every message for up to 6h. `0` is upstream's
+    # documented disable and restores v2026.7.20's immediate drain. Read before
+    # config.yaml, and inherited by all three restart paths (in-band, SIGUSR1,
+    # and the dashboard's detached restart). setdefault: set e.g. 120 to re-arm.
+    env.setdefault("HERMES_RESTART_AFTER_TURN_TIMEOUT", "0")
     return env
 
 
@@ -2218,6 +2225,13 @@ async def lifespan(app):
 #     WS URL, so we just forward path + query verbatim.
 PROXIED_WS_PATHS = ("/api/pty", "/api/ws", "/api/events", "/api/console", "/api/plugins/*")
 
+# Mirrors hermes' own ws_max_size (v2026.8.3, web_server.py:362) so this proxy
+# is never the narrow end. Our hops default lower — 1 MiB inbound from hermes,
+# 16 MiB from the browser — and an oversized frame just closes the socket, so
+# Chat/PTY vanishes mid-message with nothing in the logs. Same "both ends must
+# agree" trap as the keepalive pairing below. A cap, not a preallocation.
+HERMES_WS_MAX_BYTES = 384 * 1024 * 1024
+
 
 async def _ws_pump_client_to_upstream(
     client: WebSocket,
@@ -2310,6 +2324,8 @@ async def ws_proxy(websocket: WebSocket) -> None:
             # pumps), and the browser-facing hop keeps uvicorn's own ping.
             ping_interval=None,
             ping_timeout=None,
+            # hermes -> us leg: the narrower hop, 1 MiB by default.
+            max_size=HERMES_WS_MAX_BYTES,
             # Don't forward client cookies/headers — hermes WS auth is
             # purely token-based via the URL, and forwarding random
             # headers risks future upstream surprises.
@@ -2425,7 +2441,9 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8080"))
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info", loop="asyncio")
+    # ws_max_size: browser -> us leg of the same pairing (uvicorn defaults 16 MiB).
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info", loop="asyncio",
+                            ws_max_size=HERMES_WS_MAX_BYTES)
     server = uvicorn.Server(config)
 
     def _shutdown():
