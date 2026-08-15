@@ -11,6 +11,84 @@ release.
 
 ---
 
+## release/v2026.8.13/1 — August 15, 2026
+**Hermes v2026.8.13 · major (Hermes upgrade, from v2026.8.3)**
+
+### Hermes update
+- Hermes Agent **v2026.8.3 → v2026.8.13** — community plugin catalogue, Kanban
+  review workflows, and a new **Actual Computer** provider (`ACTUAL_API_KEY`,
+  added to `ENV_VARS` and `HERMES_PROVIDER_IDS`). All 22 existing provider-id
+  mappings re-verified against the new `PROVIDER_REGISTRY`; none renamed.
+- **cgroup-aware agent-cache shedding** (`agent.agent_cache.memory_high_mb:
+  auto`, on by default) reads the container's memory limit and evicts LRU
+  transcripts before the OOM killer fires — it directly reduces the respawn
+  cycle invariant 6 exists to survive.
+- **PDF / legacy-Office `read_file`** via `firecrawl-anydoc`, baked into the
+  image (see below).
+
+### Changes to support upstream updates
+- **`browser.backend` pinned to `off`.** Upstream's new default (`""`) means
+  "use Browser Use mode whenever the browser-use CLI is runnable", and
+  `_find_cli()` counts a bare `uvx` — which our base image
+  (`ghcr.io/astral-sh/uv`) ships. Verified in the built image:
+  `is_browser_use_cli_mode()` was `True`, which hides the whole `browser_*`
+  surface behind a single `browser_exec` that shells `uvx browser-use` and then
+  needs a Chrome this image does not contain. Also verified on **both** the
+  v2026.8.3 and v2026.8.13 images that `check_browser_requirements()` is
+  already `False` here (no Chromium), so nothing working was lost either way —
+  the pin just stops the model being handed a tool that cannot succeed.
+  `setdefault`, so an explicit choice in hermes' own settings still wins.
+- **`firecrawl-anydoc==0.1.6` baked in.** It is a *lazy* dep
+  (`tools/lazy_deps.py` → `tool.doc_extract`), not an extra, so it cannot go in
+  the Dockerfile's `.[...]` string; without it the first PDF read pip-installs
+  mid-turn into an image that is wiped on every redeploy, retrying only every
+  300s while the file reads as binary garbage. Installed from `/` — from
+  `/opt/hermes-agent`, uv reads that pyproject's `exclude-newer="14 days"` and
+  rejects the package as too new.
+- **Pause (ESTOP) surfaced.** v2026.8.13 added `hermes pause` / the in-chat
+  `/pause`, which writes `$HERMES_HOME/ESTOP` and makes hermes refuse every new
+  turn while the process stays alive — `/health` 200, gateway "running",
+  platform online. It is on the volume, so it survives a redeploy, and `/pause`
+  is `gateway_only` with no owner gate. `/setup/api/status` now reports
+  `paused`, the header shows it, and the Status panel offers **Resume**
+  (`POST /setup/api/pause/resume`).
+- **`hermes backup` rc 2 handled.** Upstream added a cross-process flock with a
+  0.25s acquire timeout and `SystemExit(2)` on contention. Our own
+  `backup_lock` cannot prevent it — hermes' snapshot path is reachable
+  independently (e.g. `/snapshot` in the proxied Chat tab). Reported as a 409
+  "another backup is running, try again" instead of a 500; on the restore path
+  this previously surfaced as "the backup command failed", which reads as data
+  loss for a quarter-second collision.
+- **Install-on-enable logged.** `PUT /api/tools/toolsets/<name>` now spawns
+  `hermes tools post-setup` on enable, on a verb the existing warning never
+  watched. Deliberately log-only: the one registered predicate today
+  (`cua_driver`) installs to `~/.local/bin`, and `HOME=/data`, so it most
+  likely lands on the volume — firing the "this will be wiped" notice would
+  misinform. The log line was the part that was actually missing.
+- **Backup completeness generalised** from `state.db` to every `*.db` on the
+  volume (v2026.8.13 adds `cron/notepad.db`; `kanban.db` and
+  `cron/executions.db` already existed), mirroring hermes' own `_EXCLUDED_DIRS`
+  so it can never demand a file hermes deliberately skips — a false positive
+  here aborts a restore.
+
+### Bug fixes
+- **A restored `.env` could kill the dashboard permanently.** v2026.8.13's new
+  `_start_parent_death_watchdog()` is not gated on `HERMES_DESKTOP`, so a
+  `HERMES_PARENT_PID` naming a dead process makes `hermes dashboard`
+  `os._exit(0)` seconds after spawn — and unlike `Gateway`, `Dashboard` has no
+  respawn supervisor, so every proxied page 503s until the container is
+  redeployed. Reproduced locally, then fixed: `build_hermes_env()` drops the
+  key (covers a Railway service variable) **and** `_sanitize_env_file()` strips
+  it from `$HERMES_HOME/.env` at boot and after a restore — the pop alone is
+  not enough, because hermes loads that file into its own `os.environ`.
+- **Stale `.partial` backup files swept.** Upstream made `hermes backup -o`
+  atomic via a dot-prefixed `.partial` sibling, which no existing cleanup
+  matched (`pre-restore-*.zip` never matches a dotted name), so a backup killed
+  mid-write leaked a file forever. Swept at boot with a 1-hour age guard so it
+  cannot race an in-flight backup.
+
+---
+
 ## release/v2026.8.3/1 — August 8, 2026
 **Hermes v2026.8.3 · major (Hermes upgrade, from v2026.7.20)**
 
