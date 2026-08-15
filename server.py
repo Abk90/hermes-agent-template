@@ -169,6 +169,48 @@ def _consolidate_pairing_dirs() -> None:
         print(f"[pairing] consolidated {src.name}: {alternate} -> {active}", flush=True)
 
 
+# ── Global emergency stop / pause (hermes >= v2026.8.13) ─────────────────────
+ESTOP_FILE = Path(HERMES_HOME) / "ESTOP"
+
+
+def estop_state() -> dict | None:
+    """Pause details, or None when the bot is accepting work.
+
+    v2026.8.13 added `hermes pause` and the in-chat `/pause`, which write a
+    sentinel at ``$HERMES_HOME/ESTOP`` (agent/estop.py). While it exists hermes
+    refuses every NEW gateway turn, cron dispatch and kanban dispatch with
+    "⏸️ Hermes is paused" — but the process stays alive, so `/health` keeps
+    returning 200, `gateway_state.json` still reads "running" and the platform
+    still shows the bot online. Without this check the admin panel would show a
+    green, healthy deployment while the bot answers nothing.
+
+    Two details make it worse than an ordinary setting, and are why this is
+    surfaced rather than ignored: the sentinel lives on the Railway volume, so
+    it SURVIVES a redeploy (the reflexive "just redeploy" fix does not clear
+    it), and `/pause` is `gateway_only` with no owner gate, so any paired
+    messaging user can engage it — it is not necessarily operator-driven.
+
+    Upstream's fail-SAFE bias is copied deliberately: an unreadable sentinel
+    counts as paused. Failing open here would report "running" for exactly the
+    deployment that is refusing every message. A corrupt or empty body is still
+    a pause, with the metadata reported as None (same as upstream get_state()).
+    """
+    try:
+        if not ESTOP_FILE.exists():
+            return None
+    except OSError:
+        return {"reason": None, "engaged_at": None}
+    reason = engaged_at = None
+    try:
+        raw = json.loads(ESTOP_FILE.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            reason = raw.get("reason") or None
+            engaged_at = raw.get("engaged_at") or None
+    except (OSError, ValueError):
+        pass
+    return {"reason": reason, "engaged_at": engaged_at}
+
+
 PAIRING_TTL = 3600
 
 # Native Hermes dashboard — runs on loopback, fronted by our reverse proxy.
@@ -218,6 +260,13 @@ ENV_VARS = [
     # auto-routes by env-var presence, no extra config needed on our side.
     # OAuth-based providers (xAI Grok SuperGrok, Gemini CLI, Qwen OAuth, Claude Code)
     # are set up via the dashboard's Keys tab or HERMES_AUTH_JSON_BOOTSTRAP.
+    # New in hermes v2026.8.13. Plain API key (ac_…); ACTUAL_BASE_URL is
+    # deliberately NOT surfaced — it defaults to https://api.actual.inc/v1 and
+    # only needs overriding for their local offline daemon, which cannot be
+    # reached from a Railway container anyway. A new ENV_VARS *category* would
+    # also have to be added to write_env()'s cat_order or the value is silently
+    # dropped from .env, so keeping this on "provider" is the safe shape.
+    ("ACTUAL_API_KEY",           "Actual Computer",          "provider",  True),
     ("NVIDIA_API_KEY",           "NVIDIA NIM",               "provider",  True),
     ("ARCEEAI_API_KEY",          "Arcee AI",                 "provider",  True),
     ("STEPFUN_API_KEY",          "Step Plan",                "provider",  True),
@@ -287,6 +336,10 @@ ENV_LABELS = {k: l for k, l, _, _ in ENV_VARS}
 # non-obvious renames upstream (dashscope->alibaba, glm->zai, kimi->kimi-coding,
 # hf->huggingface, ollama->ollama-cloud) — re-verify every entry against
 # hermes_cli/auth.py on a Hermes version bump (same audit as the WS allowlist).
+# Re-verified against v2026.8.13's PROVIDER_REGISTRY: all ids below still exist,
+# none renamed, `actual` added. Note "openrouter" is NOT a PROVIDER_REGISTRY
+# entry in either release — resolve_provider() special-cases it (auth.py's
+# `if normalized == "openrouter": return "openrouter"`), so it stays valid.
 HERMES_PROVIDER_IDS = {
     "OPENROUTER_API_KEY":    "openrouter",
     "DEEPSEEK_API_KEY":      "deepseek",
@@ -296,6 +349,7 @@ HERMES_PROVIDER_IDS = {
     "MINIMAX_API_KEY":       "minimax",
     "MINIMAX_CN_API_KEY":    "minimax-cn",    # China platform (api.minimaxi.com)
     "HF_TOKEN":              "huggingface",
+    "ACTUAL_API_KEY":        "actual",        # Actual Computer (v2026.8.13+)
     "NVIDIA_API_KEY":        "nvidia",
     "ARCEEAI_API_KEY":       "arcee",
     "STEPFUN_API_KEY":       "stepfun",
@@ -496,6 +550,32 @@ def write_config_yaml(data: dict[str, str], *, reset_model: bool = False) -> Non
     merged_terminal["cwd"] = "/tmp"
     merged["terminal"] = merged_terminal
 
+    # Pin the browser backend off, because this image opts into the new one by
+    # ACCIDENT. v2026.8.13 added `browser.backend`, whose default "" means "use
+    # Browser Use mode whenever the browser-use CLI is runnable" — and
+    # _find_cli() (tools/browser_use_cli.py) counts a bare `uvx` as runnable.
+    # Our base image IS ghcr.io/astral-sh/uv, which ships /usr/local/bin/uvx,
+    # so the default silently resolves to Browser Use here (verified in the
+    # built image: is_browser_use_cli_mode() -> True).
+    #
+    # That swaps the whole browser_* surface for a single `browser_exec` tool
+    # (check_fn=is_browser_use_cli_mode, and present in the general/coding/
+    # research toolsets), which shells out to `uvx browser-use` — a PyPI fetch
+    # on first call — and then needs a CDP-reachable Chrome. This image has no
+    # Chromium at all, so that tool can only fail, after burning a turn.
+    # Nothing is lost by pinning: verified on BOTH the v2026.8.3 and v2026.8.13
+    # images that check_browser_requirements() is already False here (no
+    # Chromium), so the built-in browser_* tools are not exposed either way.
+    # This keeps the model's toolbox identical to v2026.8.3 rather than handing
+    # it a tool that cannot work.
+    #
+    # setdefault, not assignment — "off" is upstream's documented opt-out, and
+    # someone who deliberately picks Browser Use in hermes' own settings (or
+    # `/browser use on`) should keep it. Revisit if Chromium is ever baked in.
+    merged_browser = dict(merged.get("browser") if isinstance(merged.get("browser"), dict) else {})
+    merged_browser.setdefault("backend", "off")
+    merged["browser"] = merged_browser
+
     merged_agent = dict(merged.get("agent") if isinstance(merged.get("agent"), dict) else {})
     merged_agent.setdefault("max_iterations", 50)
     merged["agent"] = merged_agent
@@ -567,7 +647,52 @@ def build_hermes_env() -> dict[str, str]:
     # config.yaml, and inherited by all three restart paths (in-band, SIGUSR1,
     # and the dashboard's detached restart). setdefault: set e.g. 120 to re-arm.
     env.setdefault("HERMES_RESTART_AFTER_TURN_TIMEOUT", "0")
+    # Never hand a hermes subprocess HERMES_PARENT_PID. v2026.8.13's new
+    # _start_parent_death_watchdog() (hermes_cli/web_server.py) polls that PID
+    # and calls os._exit(0) once it is gone — it is the Electron desktop's
+    # orphan guard, and it is NOT gated on HERMES_DESKTOP, so it arms itself on
+    # any `hermes dashboard` whose environment carries the key. Killing the
+    # dashboard is unrecoverable here: unlike Gateway it has no respawn
+    # supervisor, so every proxied page 503s until the container is redeployed.
+    # This pop covers the plausible vector — an operator pasting it in as a
+    # Railway service variable, which lands in our own os.environ.
+    #
+    # It is deliberately NOT the whole fix: hermes also loads $HERMES_HOME/.env
+    # into its own os.environ at startup, so a value sitting in that FILE
+    # re-arms the watchdog no matter what env we pass. _sanitize_env_file()
+    # handles that half at boot; both are needed.
+    env.pop("HERMES_PARENT_PID", None)
     return env
+
+
+# Keys that must never survive in $HERMES_HOME/.env, because hermes re-reads
+# that file into its own os.environ and would act on them regardless of the env
+# we pass to the subprocess. Verified locally against v2026.8.13: with
+# HERMES_PARENT_PID=999999 in .env the dashboard os._exit(0)s seconds after
+# spawn ("[dashboard] exited cleanly (code 0)") and every proxied page 503s
+# permanently. Only a restored or hand-edited .env can carry it, so this is a
+# boot-time heal rather than a check on every read.
+ENV_FILE_FORBIDDEN_KEYS = ("HERMES_PARENT_PID",)
+
+
+def _sanitize_env_file() -> None:
+    """Drop keys from .env that would let hermes kill its own dashboard."""
+    try:
+        data = read_env(ENV_FILE)
+    except OSError:
+        return
+    removed = [k for k in ENV_FILE_FORBIDDEN_KEYS if k in data]
+    if not removed:
+        return
+    for key in removed:
+        data.pop(key, None)
+    try:
+        write_env(ENV_FILE, data)
+    except OSError as e:
+        print(f"[server] could not strip {removed} from .env: {e}", flush=True)
+        return
+    print(f"[server] removed {', '.join(removed)} from .env — it would have "
+          f"shut the dashboard down", flush=True)
 
 
 def write_env(path: Path, data: dict[str, str]) -> None:
@@ -1549,7 +1674,36 @@ async def api_status(request: Request):
         for name, key in CHANNEL_MAP.items()
     }
     return JSONResponse({"gateway": gw.status(), "providers": providers,
-                         "channels": channels, "hermes_version": HERMES_VERSION})
+                         "channels": channels, "hermes_version": HERMES_VERSION,
+                         # None when running; a dict (possibly with null fields)
+                         # when hermes' ESTOP sentinel is engaged — see
+                         # estop_state() for why a green panel would otherwise
+                         # be actively misleading.
+                         "paused": estop_state()})
+
+
+async def api_estop_resume(request: Request):
+    """Clear the pause sentinel — the "Resume" control in the admin panel.
+
+    Mirrors hermes' own `hermes resume` / `/pause off`, which is just
+    ``disengage()`` unlinking ``$HERMES_HOME/ESTOP`` (agent/estop.py). hermes
+    re-stats the sentinel on every check with no caching, so the next inbound
+    message is served immediately — deliberately no gateway restart here, which
+    would drop adapter connections for no reason.
+
+    Resuming something that was never paused is a success, not an error: the
+    button exists to guarantee the end state, and a 404 would be a confusing
+    way to say "already running".
+    """
+    if err := guard(request): return err
+    try:
+        ESTOP_FILE.unlink()
+    except FileNotFoundError:
+        return JSONResponse({"ok": True, "resumed": False})
+    except OSError as e:
+        return JSONResponse({"error": f"Could not clear the pause: {e}"}, status_code=500)
+    print("[estop] pause cleared from the admin panel", flush=True)
+    return JSONResponse({"ok": True, "resumed": True})
 
 
 async def api_logs(request: Request):
@@ -1710,6 +1864,34 @@ BACKUP_DIR = Path(HERMES_HOME) / "backups"   # hermes' own pre-update-backup con
                                               # bloat a future full backup.
 PRE_RESTORE_KEEP = 3
 BACKUP_SUBPROCESS_TIMEOUT = 600  # 10 min ceiling for both `hermes backup` and `hermes import`
+
+# hermes >= v2026.8.13 serializes backups across processes: `run_backup` takes a
+# flock on $HERMES_HOME/.backup.lock with a 0.25s acquire timeout and, on a
+# miss, raises SystemExit(2) after printing "another Hermes backup is already
+# running". Our own asyncio `backup_lock` cannot prevent this — it only
+# serializes OUR two callers, while hermes' snapshot path is reachable
+# independently (e.g. `/snapshot` typed in the proxied Chat tab, or the native
+# dashboard's own detached backup action). Distinguishing rc 2 matters most on
+# the restore path, where a generic failure is reported as "could not create a
+# complete pre-restore safety snapshot" — which reads as "your data is
+# unbackupable" when the real cause is a quarter-second lock collision that
+# succeeds on retry.
+BACKUP_BUSY_RC = 2
+# rc 2 alone is NOT sufficient evidence of a lock collision: argparse also exits
+# 2 on an unrecognised flag (verified — `hermes backup --nonsense` -> rc 2).
+# Our argv is fixed, so that can only happen if a future hermes renames `-o`,
+# but then we would be telling the user "another backup is running" forever
+# while the real problem is a broken CLI. Require upstream's marker text too and
+# fall back to the generic failure (which prints the real output) otherwise —
+# an upstream reword degrades to today's behaviour, never to a false diagnosis.
+BACKUP_BUSY_MARKER = "already running"
+BACKUP_BUSY_MESSAGE = ("Another Hermes backup or snapshot is running right now "
+                       "(they cannot run at the same time). Try again in a moment.")
+
+
+def _is_backup_busy(rc: int, output: str) -> bool:
+    """True when `hermes backup` bailed because it lost the cross-process lock."""
+    return rc == BACKUP_BUSY_RC and BACKUP_BUSY_MARKER in (output or "").lower()
 SNAPSHOT_NAME_RE = re.compile(r"^pre-restore-\d+-[0-9a-f]+\.zip$")
 
 backup_lock = asyncio.Lock()
@@ -1769,6 +1951,79 @@ def _sweep_stale_backup_tmpdirs() -> None:
     for stale in Path(tempfile.gettempdir()).glob("hermes-backup-*"):
         shutil.rmtree(stale, ignore_errors=True)
 
+    # v2026.8.13 made `hermes backup -o` atomic: it builds the archive at
+    # `.<name>.<pid>-<tid>.partial` beside the target and os.replace()s it on a
+    # clean close. Good change — a failed backup no longer leaves a truncated
+    # zip — but a hard kill (OOM, redeploy mid-snapshot) strands the partial,
+    # and it is invisible to every cleanup we have: both
+    # _prune_pre_restore_snapshots() and api_backup_snapshots() glob
+    # `pre-restore-*.zip`, which never matches a dot-prefixed name. Left alone
+    # these accumulate on the volume forever.
+    #
+    # Age guard, not a blanket delete: our own calls are serialized by
+    # backup_lock, but hermes' dashboard has its own detached `hermes backup`
+    # action, so a fresh partial may belong to a run that is still writing.
+    # One hour is far beyond BACKUP_SUBPROCESS_TIMEOUT (10 min), so anything
+    # older cannot still be in flight.
+    cutoff = time.time() - 3600
+    try:
+        for partial in BACKUP_DIR.glob(".pre-restore-*.partial"):
+            try:
+                if partial.stat().st_mtime < cutoff:
+                    partial.unlink(missing_ok=True)
+                    print(f"[backup] removed stale partial {partial.name}", flush=True)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+# Mirrors hermes' own _EXCLUDED_DIRS (hermes_cli/backup.py, v2026.8.13) so
+# _live_db_names() can never demand a database hermes deliberately skips. That
+# direction matters: a false "incomplete" ABORTS a restore, which is strictly
+# worse than the gap it closes. Re-check this against upstream on a bump.
+_BACKUP_EXCLUDED_DIRS = {
+    "hermes-agent", "__pycache__", ".git", "node_modules", "backups",
+    "checkpoints", ".venv", "venv", "site-packages",
+    ".cache", ".tox", ".nox", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+}
+
+
+def _live_db_names() -> set[str]:
+    """Base names of every SQLite DB on the volume that a backup should contain.
+
+    Was hardcoded to state.db. v2026.8.13 keeps adding databases beside it
+    (cron/notepad.db is new; kanban.db, cron/executions.db, projects.db,
+    response_store.db and verification_evidence.db already existed), and
+    hermes' `_safe_copy_db` fails CLOSED — it drops a database it cannot
+    snapshot from the archive while `hermes backup` still exits 0. A check
+    naming only state.db therefore certifies an archive as sound while other
+    databases are silently absent from it.
+
+    Names, not paths: hermes writes some of these nested (cron/…), and
+    _incomplete_backup_reason compares against `Path(n).name` from the zip, so
+    both sides stay prefix-agnostic. Two same-named DBs in different
+    directories would compare as one — a false NEGATIVE, which is the safe
+    direction here (it never blocks a restore).
+    """
+    root = Path(HERMES_HOME)
+    found: set[str] = set()
+    try:
+        for path in root.rglob("*.db"):
+            try:
+                if not path.is_file():
+                    continue
+                parents = path.relative_to(root).parts[:-1]
+            except (OSError, ValueError):
+                continue
+            if any(part in _BACKUP_EXCLUDED_DIRS for part in parents):
+                continue
+            found.add(path.name)
+    except OSError:
+        # Can't walk the volume — say nothing rather than block a restore.
+        return set()
+    return found
+
 
 def _incomplete_backup_reason(zip_path: Path) -> str | None:
     """Why `zip_path` is not a trustworthy backup, or None when it looks sound.
@@ -1791,9 +2046,15 @@ def _incomplete_backup_reason(zip_path: Path) -> str | None:
             names = {Path(n).name for n in zf.namelist()}
     except Exception as e:
         return f"the archive could not be read back ({e})"
-    if (Path(HERMES_HOME) / "state.db").exists() and "state.db" not in names:
-        return "state.db (sessions and chat history) is missing from the archive"
-    return None
+    missing = sorted(_live_db_names() - names)
+    if not missing:
+        return None
+    if "state.db" in missing:
+        # Name the one users recognise first — it is the sessions/chat history.
+        others = [m for m in missing if m != "state.db"]
+        tail = f" (also {', '.join(others)})" if others else ""
+        return f"state.db (sessions and chat history) is missing from the archive{tail}"
+    return f"{', '.join(missing)} missing from the archive"
 
 
 async def api_backup_download(request: Request) -> Response:
@@ -1804,6 +2065,10 @@ async def api_backup_download(request: Request) -> Response:
         tmp_dir = tempfile.mkdtemp(prefix="hermes-backup-")
         zip_path = Path(tmp_dir) / "backup.zip"
         rc, output = await _run_hermes_cli("backup", "-o", str(zip_path))
+        if _is_backup_busy(rc, output):
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            return JSONResponse({"error": BACKUP_BUSY_MESSAGE, "output": output[-2000:]},
+                                status_code=409)
         if rc != 0 or not zip_path.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
             return JSONResponse({"error": "Backup failed", "output": output[-2000:]}, status_code=500)
@@ -1913,9 +2178,20 @@ async def api_backup_restore(request: Request) -> Response:
             # a distinct prior snapshot (two restores fired back-to-back).
             snap_path = BACKUP_DIR / f"pre-restore-{int(time.time())}-{secrets.token_hex(4)}.zip"
             rc, output = await _run_hermes_cli("backup", "-o", str(snap_path))
+            # A lock collision is transient and retryable — say so, instead of
+            # reporting it as "the backup command failed", which reads as data
+            # loss. Nothing has been touched yet at this point, so the restore
+            # is simply not started. 409, matching the in-progress guard above.
+            if _is_backup_busy(rc, output):
+                snap_path.unlink(missing_ok=True)
+                return JSONResponse(
+                    {"error": f"{BACKUP_BUSY_MESSAGE} Nothing was changed — the restore did not start.",
+                     "output": output[-2000:]},
+                    status_code=409,
+                )
             # rc alone is no longer sufficient — see _incomplete_backup_reason().
-            # A snapshot missing state.db is not an undo copy, so treat it the
-            # same as a failed one and refuse to touch live state.
+            # A snapshot missing a live database is not an undo copy, so treat
+            # it the same as a failed one and refuse to touch live state.
             snap_problem = _incomplete_backup_reason(snap_path) if rc == 0 else None
             if rc != 0 or snap_problem:
                 detail = snap_problem or "the backup command failed"
@@ -1941,6 +2217,13 @@ async def api_backup_restore(request: Request) -> Response:
                     _consolidate_pairing_dirs()
                 except Exception as e:
                     print(f"[pairing] consolidate after restore failed: {e!r}", flush=True)
+                # A restored .env is the only realistic way HERMES_PARENT_PID
+                # reaches this volume, and the dashboard is restarted just
+                # below — strip it before that spawn, not at the next boot.
+                try:
+                    _sanitize_env_file()
+                except Exception as e:
+                    print(f"[server] .env sanitize after restore failed: {e!r}", flush=True)
                 # Always bring the dashboard back; only auto-start the gateway if
                 # the (possibly just-restored) config is actually complete — same
                 # rule auto_start() uses on boot. This runs even if the import
@@ -1986,6 +2269,41 @@ BACK_TO_SETUP_WIDGET = (
 _IN_CONTAINER_INSTALL_RE = re.compile(
     r"^/api/(?:memory/providers/[^/]+/setup|tools/toolsets/[^/]+/post-setup)$"
 )
+
+# v2026.8.13 added a SECOND way to start an install from the Tools tab, on a
+# different verb: PUT /api/tools/toolsets/<name> ("install-on-enable",
+# hermes_cli/web_routers/tools.py). Flipping a toolset ON now spawns
+# `hermes tools post-setup <key>` in the background whenever that toolset's
+# provider has a post_setup hook with an UNSATISFIED install-state predicate.
+# Today `_POST_SETUP_INSTALLED` (hermes_cli/tools_config.py) holds exactly one
+# entry — cua_driver, i.e. Computer Use — but upstream documents that dict as a
+# list to extend, so this will grow silently on future bumps.
+#
+# This is log-only, deliberately: unlike the two POST paths, we do NOT inject a
+# confirm() here. The existing notice says the install is wiped on redeploy,
+# and for cua_driver that is probably FALSE — its installer targets
+# ~/.local/bin, and the Dockerfile sets HOME=/data, so it most likely lands on
+# the Railway volume and survives (same reasoning that keeps
+# POST /api/mcp/catalog/install deliberately uncovered). Telling the user their
+# install is about to vanish when it will not is worse than staying quiet, so
+# we take the log line — which is what was actually missing — and skip the
+# popup until a path is confirmed to write into the image.
+_IN_CONTAINER_INSTALL_PUT_RE = re.compile(r"^/api/tools/toolsets/[^/]+$")
+
+
+def _in_container_install_kind(method: str, path: str) -> str | None:
+    """Name the in-container install this request starts, or None.
+
+    Method-aware because the two families differ: the memory-provider and
+    post-setup endpoints are POST, while install-on-enable is a PUT on a path
+    that has no POST equivalent (a GET of the same shape is the read side).
+    """
+    verb = method.upper()
+    if verb == "POST" and _IN_CONTAINER_INSTALL_RE.match(path):
+        return "warned"
+    if verb == "PUT" and _IN_CONTAINER_INSTALL_PUT_RE.match(path):
+        return "install-on-enable"
+    return None
 
 # Warn before any dashboard action that installs into the RUNNING container.
 # Neither endpoint carries an install-method check, so the `.install_method=docker`
@@ -2141,9 +2459,17 @@ async def route_proxy(request: Request) -> Response:
     # the confirm() from IMMUTABLE_INSTALL_WARNING_JS, but this is the only
     # record in `railway logs` explaining why a provider works now and breaks
     # after the next redeploy.
-    if request.method == "POST" and _IN_CONTAINER_INSTALL_RE.match(request.url.path):
+    kind = _in_container_install_kind(request.method, request.url.path)
+    if kind == "warned":
         print(f"[proxy] in-container install requested: {request.url.path} — "
               f"immutable image, this will not survive a redeploy", flush=True)
+    elif kind == "install-on-enable":
+        # No confirm() fires for this one — see _IN_CONTAINER_INSTALL_PUT_RE.
+        # This line is the only trace that a toolset toggle kicked off a
+        # background `hermes tools post-setup`, so keep it even though the
+        # install itself most likely lands on the volume.
+        print(f"[proxy] toolset enable may trigger an install-on-enable: "
+              f"{request.method} {request.url.path} (hermes >= v2026.8.13)", flush=True)
     return await _proxy_to_dashboard(request)
 
 
@@ -2164,6 +2490,13 @@ async def auto_start():
 @asynccontextmanager
 async def lifespan(app):
     _sweep_stale_backup_tmpdirs()
+    # Strip .env keys that would make hermes shut its own dashboard down before
+    # we spawn it — same "heal the volume before anything reads it" slot as the
+    # pairing consolidation below.
+    try:
+        _sanitize_env_file()
+    except Exception as e:
+        print(f"[server] .env sanitize at boot failed: {e!r}", flush=True)
     # Heal a pairing store split across the legacy and consolidated dirs before
     # anything reads it. Only a restore can create that here, but an earlier
     # restore (or a volume carried over from a pre-fix deploy) may already have.
@@ -2388,6 +2721,7 @@ routes = [
     Route("/setup/api/gateway/stop",            api_gw_stop,         methods=["POST"]),
     Route("/setup/api/gateway/restart",         api_gw_restart,      methods=["POST"]),
     Route("/setup/api/config/reset",            api_config_reset,    methods=["POST"]),
+    Route("/setup/api/pause/resume",            api_estop_resume,    methods=["POST"]),
     Route("/setup/api/pairing/pending",         api_pairing_pending),
     Route("/setup/api/pairing/approve",         api_pairing_approve, methods=["POST"]),
     Route("/setup/api/pairing/deny",            api_pairing_deny,    methods=["POST"]),
