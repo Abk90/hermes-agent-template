@@ -40,15 +40,11 @@ RUN apt-get -o Acquire::Retries=3 update && \
 # two working local Codex channels. The Railway copy is patched to reject every
 # send, interactive-reply and logout request at the HTTP boundary.
 FROM golang:1.24-alpine AS whatsapp_build
-ARG WHATSAPP_MCP_REF=10d1551d7ec4d69444abde52ca018ec7e0069dcb
 RUN apk add --no-cache git ca-certificates gcc musl-dev sqlite-dev
 WORKDIR /src
-RUN git clone https://github.com/iamveene/whatsapp-mcp.git . && \
-    git checkout "${WHATSAPP_MCP_REF}"
-COPY patches/whatsapp-mcp-python.patch /tmp/whatsapp-mcp-python.patch
+COPY vendor/whatsapp-mcp/ /src/
 COPY patches/whatsapp-bridge-readonly.patch /tmp/whatsapp-bridge-readonly.patch
-RUN git apply --ignore-space-change --ignore-whitespace /tmp/whatsapp-mcp-python.patch && \
-    git apply /tmp/whatsapp-bridge-readonly.patch && \
+RUN git apply /tmp/whatsapp-bridge-readonly.patch && \
     CGO_ENABLED=1 go build -ldflags="-w -s -extldflags '-static'" \
         -o /out/whatsapp-bridge main.go
 
