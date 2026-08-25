@@ -777,21 +777,12 @@ def _has_configured_oauth_tokens() -> bool:
         if not provider:
             return False
 
-        auth_path = Path(HERMES_HOME) / "auth.json"
-        data = json.loads(auth_path.read_text())
+        # Delegate to Hermes' own provider-aware status resolver. In particular,
+        # Codex credentials can live in either the legacy provider singleton or
+        # the newer credential pool; this resolver handles both representations.
+        from hermes_cli.auth import get_auth_status
 
-        state = (data.get("providers") or {}).get(provider) or {}
-        tokens = state.get("tokens") or {}
-        if tokens.get("access_token") and tokens.get("refresh_token"):
-            return True
-
-        entries = (data.get("credential_pool") or {}).get(provider) or []
-        return any(
-            isinstance(entry, dict)
-            and entry.get("access_token")
-            and entry.get("refresh_token")
-            for entry in entries
-        )
+        return bool(get_auth_status(provider).get("logged_in"))
     except Exception:
         return False
 
