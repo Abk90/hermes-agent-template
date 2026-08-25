@@ -477,7 +477,14 @@ def write_config_yaml(data: dict[str, str], *, reset_model: bool = False) -> Non
         merged_model = {"default": ""}
     else:
         merged_model = dict(merged.get("model") if isinstance(merged.get("model"), dict) else {})
-        merged_model["default"] = model
+        # ``LLM_MODEL`` is optional for OAuth-native providers configured by
+        # Hermes itself (notably openai-codex).  In that case the authoritative
+        # model already lives in config.yaml.  Do not erase it merely because
+        # the Railway wrapper's legacy .env file has no duplicate value.
+        if model:
+            merged_model["default"] = model
+        elif "default" not in merged_model:
+            merged_model["default"] = ""
         current_provider = str(merged_model.get("provider") or "").strip()
         # Only default to "auto" on a config that has never had a provider
         # pinned. Once a provider is set explicitly — either by
@@ -787,6 +794,25 @@ def _has_configured_oauth_tokens() -> bool:
         return False
 
 
+def _configured_model() -> str:
+    """Return the model selected in Hermes' authoritative config.yaml."""
+    config_path = Path(HERMES_HOME) / "config.yaml"
+    if not config_path.exists():
+        return ""
+    try:
+        import yaml
+
+        loaded = yaml.safe_load(config_path.read_text())
+        if not isinstance(loaded, dict):
+            return ""
+        model = loaded.get("model") or {}
+        if not isinstance(model, dict):
+            return ""
+        return str(model.get("default") or "").strip()
+    except Exception:
+        return ""
+
+
 def _save_xai_auth_json(tokens: dict) -> None:
     """Write xAI OAuth tokens to auth.json in hermes's expected format."""
     auth_path = Path(HERMES_HOME) / "auth.json"
@@ -1013,7 +1039,7 @@ def is_config_complete(data: dict[str, str] | None = None) -> bool:
     """
     if data is None:
         data = read_env(ENV_FILE)
-    has_model = bool(data.get("LLM_MODEL"))
+    has_model = bool(data.get("LLM_MODEL") or _configured_model())
     has_provider = (
         any(data.get(k) for k in PROVIDER_KEYS)
         or _has_xai_oauth_tokens()
@@ -1251,7 +1277,7 @@ class Gateway:
         self._stopping = False
         try:
             env = build_hermes_env()
-            model = env.get("LLM_MODEL", "")
+            model = env.get("LLM_MODEL", "") or _configured_model()
             provider_key = next((env.get(k, "") for k in PROVIDER_KEYS if env.get(k)), "")
             print(f"[gateway] model={model or '⚠ NOT SET'} | provider_key={'set' if provider_key else '⚠ NOT SET'}", flush=True)
             # Write config.yaml so hermes picks up the model (env vars alone aren't always enough)
