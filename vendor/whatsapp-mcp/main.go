@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -38,17 +39,43 @@ import (
 // Global QR code storage for API access
 var currentQRCode string
 var qrCodeMutex sync.RWMutex
+var pairPhoneMutex sync.Mutex
+
+func normalizePairingPhone(raw string) (string, error) {
+	phone := strings.TrimPrefix(strings.TrimSpace(raw), "+")
+	if len(phone) < 7 || len(phone) > 15 {
+		return "", fmt.Errorf("phone number must contain 7 to 15 digits in international format")
+	}
+	if phone[0] == '0' {
+		return "", fmt.Errorf("phone number must use international format without a leading zero")
+	}
+	for _, char := range phone {
+		if char < '0' || char > '9' {
+			return "", fmt.Errorf("phone number must contain digits only")
+		}
+	}
+	return phone, nil
+}
+
+func requestIsLoopback(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
 
 // Reconnection state management
 type ReconnectionState struct {
-	mutex              sync.RWMutex
-	reconnectAttempts  int
+	mutex                sync.RWMutex
+	reconnectAttempts    int
 	maxReconnectAttempts int
-	lastReconnectTime  time.Time
-	lastActivityTime   time.Time
-	sessionStartTime   time.Time
-	isReconnecting     bool
-	needsReauth        bool
+	lastReconnectTime    time.Time
+	lastActivityTime     time.Time
+	sessionStartTime     time.Time
+	isReconnecting       bool
+	needsReauth          bool
 }
 
 var reconnectState = &ReconnectionState{
@@ -199,13 +226,13 @@ func (store *MessageStore) GetChats() (map[string]time.Time, error) {
 
 // InteractiveMessageData represents the JSON structure for interactive messages
 type InteractiveMessageData struct {
-	Type        string                   `json:"type"`
-	Header      string                   `json:"header,omitempty"`
-	Body        string                   `json:"body,omitempty"`
-	Footer      string                   `json:"footer,omitempty"`
-	Buttons     []InteractiveButton      `json:"buttons,omitempty"`
-	Sections    []InteractiveSection     `json:"sections,omitempty"`
-	NativeFlow  *NativeFlowData          `json:"native_flow,omitempty"`
+	Type       string               `json:"type"`
+	Header     string               `json:"header,omitempty"`
+	Body       string               `json:"body,omitempty"`
+	Footer     string               `json:"footer,omitempty"`
+	Buttons    []InteractiveButton  `json:"buttons,omitempty"`
+	Sections   []InteractiveSection `json:"sections,omitempty"`
+	NativeFlow *NativeFlowData      `json:"native_flow,omitempty"`
 }
 
 type InteractiveButton struct {
@@ -422,8 +449,8 @@ func formatButtonsResponseMessage(response *waProto.ButtonsResponseMessage) stri
 	}
 
 	data := map[string]interface{}{
-		"type":               "buttons_response",
-		"selected_button_id": response.GetSelectedButtonID(),
+		"type":                  "buttons_response",
+		"selected_button_id":    response.GetSelectedButtonID(),
 		"selected_display_text": response.GetSelectedDisplayText(),
 	}
 
@@ -557,7 +584,7 @@ func sendWhatsAppMessage(client *whatsmeow.Client, recipient string, message str
 		// Normalize phone number - strip leading '+' if present
 		// WhatsApp expects numbers without the + prefix (e.g., "5527999616279", not "+5527999616279")
 		phoneNumber := strings.TrimPrefix(recipient, "+")
-		
+
 		// Create JID from phone number
 		recipientJID = types.JID{
 			User:   phoneNumber,
@@ -1077,7 +1104,7 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 	http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		
+
 		reconnectState.mutex.RLock()
 		reconnectAttempts := reconnectState.reconnectAttempts
 		needsReauth := reconnectState.needsReauth
@@ -1085,25 +1112,25 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 		lastActivity := reconnectState.lastActivityTime
 		sessionStart := reconnectState.sessionStartTime
 		reconnectState.mutex.RUnlock()
-		
+
 		// Calculate session age
 		var sessionAgeSec int64
 		if !sessionStart.IsZero() {
 			sessionAgeSec = int64(time.Since(sessionStart).Seconds())
 		}
-		
+
 		// Calculate time since last activity
 		var lastActivitySec int64
 		if !lastActivity.IsZero() {
 			lastActivitySec = int64(time.Since(lastActivity).Seconds())
 		}
-		
+
 		// Use IsLoggedIn() to check actual authentication status, not just websocket connection
 		// IsConnected() only checks if websocket is open to WhatsApp servers
 		// IsLoggedIn() checks if we have a valid device session (QR code was scanned)
 		authenticated := client.IsLoggedIn()
 		connected := client.IsConnected()
-		
+
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":             "healthy",
 			"connected":          connected,
@@ -1147,6 +1174,71 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 				"message": "QR code not available yet, container starting...",
 			})
 		}
+	})
+
+	// Pair by an eight-character code instead of a QR. This operator-only
+	// endpoint is deliberately loopback-only: it is called through Railway SSH
+	// and is never exposed to Hermes, the MCP server, or the public dashboard.
+	http.HandleFunc("/api/pair-phone", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !requestIsLoopback(r) {
+			http.Error(w, "Pairing is available from loopback only", http.StatusForbidden)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if client.IsLoggedIn() {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"message": "Already authenticated",
+				"code":    nil,
+			})
+			return
+		}
+		if !client.IsConnected() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"message": "Pairing window expired; restart this bridge and retry",
+			})
+			return
+		}
+
+		var req struct {
+			Phone string `json:"phone"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request format", http.StatusBadRequest)
+			return
+		}
+		phone, err := normalizePairingPhone(req.Phone)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		pairPhoneMutex.Lock()
+		defer pairPhoneMutex.Unlock()
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		code, err := client.PairPhone(ctx, phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+		if err != nil {
+			w.WriteHeader(http.StatusBadGateway)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"message": "WhatsApp refused the phone-number pairing request",
+			})
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"message": "Enter this code in WhatsApp linked devices",
+			"code":    code,
+		})
 	})
 
 	// Logout endpoint (unpairs device from WhatsApp account)
@@ -1257,10 +1349,10 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 
 		// Parse the request body
 		var req struct {
-			Recipient    string `json:"recipient"`      // JID of the bot/chat
-			SelectedID   string `json:"selected_id"`    // The ID of the selected option
-			SelectedText string `json:"selected_text"`  // Display text of selection (optional)
-			ResponseType string `json:"response_type"`  // "list", "buttons", or "native_flow"
+			Recipient    string `json:"recipient"`     // JID of the bot/chat
+			SelectedID   string `json:"selected_id"`   // The ID of the selected option
+			SelectedText string `json:"selected_text"` // Display text of selection (optional)
+			ResponseType string `json:"response_type"` // "list", "buttons", or "native_flow"
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1315,8 +1407,8 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 			// ListResponseMessage for list menu selections
 			msg = &waProto.Message{
 				ListResponseMessage: &waProto.ListResponseMessage{
-					Title:       proto.String(req.SelectedText),
-					ListType:    waProto.ListResponseMessage_SINGLE_SELECT.Enum(),
+					Title:    proto.String(req.SelectedText),
+					ListType: waProto.ListResponseMessage_SINGLE_SELECT.Enum(),
 					SingleSelectReply: &waProto.ListResponseMessage_SingleSelectReply{
 						SelectedRowID: proto.String(req.SelectedID),
 					},
@@ -1352,7 +1444,7 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 		// Send the response message
 		sendCtx, sendCancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer sendCancel()
-		
+
 		_, err = client.SendMessage(sendCtx, recipientJID, msg)
 
 		w.Header().Set("Content-Type", "application/json")
@@ -1404,11 +1496,11 @@ func calculateBackoffDuration(attempt int) time.Duration {
 	// Base: 1s, 2s, 4s, 8s, 16s, 32s, 60s (max)
 	maxDuration := 60 * time.Second
 	baseDuration := time.Duration(1<<uint(attempt)) * time.Second
-	
+
 	if baseDuration > maxDuration {
 		baseDuration = maxDuration
 	}
-	
+
 	// Add jitter (±25%)
 	jitter := time.Duration(rand.Int63n(int64(baseDuration) / 2))
 	return baseDuration + jitter
@@ -1417,7 +1509,7 @@ func calculateBackoffDuration(attempt int) time.Duration {
 // attemptReconnect handles reconnection with exponential backoff
 func attemptReconnect(client *whatsmeow.Client, logger waLog.Logger) bool {
 	reconnectState.mutex.Lock()
-	
+
 	// Check if we've exceeded max attempts
 	if reconnectState.reconnectAttempts >= reconnectState.maxReconnectAttempts {
 		logger.Errorf("Maximum reconnection attempts (%d) reached. Manual re-authentication required.", reconnectState.maxReconnectAttempts)
@@ -1426,25 +1518,25 @@ func attemptReconnect(client *whatsmeow.Client, logger waLog.Logger) bool {
 		reconnectState.mutex.Unlock()
 		return false
 	}
-	
+
 	// Check if we should throttle reconnection attempts
 	timeSinceLastAttempt := time.Since(reconnectState.lastReconnectTime)
 	requiredBackoff := calculateBackoffDuration(reconnectState.reconnectAttempts)
-	
+
 	if timeSinceLastAttempt < requiredBackoff {
 		reconnectState.mutex.Unlock()
 		return false // Too soon to retry
 	}
-	
+
 	reconnectState.reconnectAttempts++
 	reconnectState.lastReconnectTime = time.Now()
 	reconnectState.isReconnecting = true
 	attempt := reconnectState.reconnectAttempts
 	reconnectState.mutex.Unlock()
-	
-	logger.Infof("Attempting reconnection (attempt %d/%d) after %v backoff...", 
+
+	logger.Infof("Attempting reconnection (attempt %d/%d) after %v backoff...",
 		attempt, reconnectState.maxReconnectAttempts, requiredBackoff)
-	
+
 	// Attempt to reconnect
 	err := client.Connect()
 	if err != nil {
@@ -1454,10 +1546,10 @@ func attemptReconnect(client *whatsmeow.Client, logger waLog.Logger) bool {
 		reconnectState.mutex.Unlock()
 		return false
 	}
-	
+
 	// Wait a moment to verify connection
 	time.Sleep(2 * time.Second)
-	
+
 	if client.IsConnected() && client.IsLoggedIn() {
 		logger.Infof("✅ Reconnection successful on attempt %d", attempt)
 		reconnectState.mutex.Lock()
@@ -1468,7 +1560,7 @@ func attemptReconnect(client *whatsmeow.Client, logger waLog.Logger) bool {
 		updateActivityTime()
 		return true
 	}
-	
+
 	logger.Warnf("Reconnection attempt %d: connected but not authenticated", attempt)
 	reconnectState.mutex.Lock()
 	reconnectState.isReconnecting = false
@@ -1480,7 +1572,7 @@ func attemptReconnect(client *whatsmeow.Client, logger waLog.Logger) bool {
 func startKeepalive(client *whatsmeow.Client, logger waLog.Logger, stopChan <-chan struct{}) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -1580,7 +1672,7 @@ func main() {
 
 		case *events.Disconnected:
 			logger.Warnf("⚠️  Disconnected from WhatsApp")
-			
+
 			// Attempt automatic reconnection
 			go func() {
 				time.Sleep(2 * time.Second) // Brief pause before reconnecting
@@ -1595,7 +1687,7 @@ func main() {
 			reconnectState.needsReauth = true
 			reconnectState.reconnectAttempts = 0
 			reconnectState.mutex.Unlock()
-			
+
 			// Clear QR code to force regeneration
 			qrCodeMutex.Lock()
 			currentQRCode = ""
@@ -1609,7 +1701,7 @@ func main() {
 
 		case *events.StreamError:
 			logger.Errorf("❌ Stream error: %v", v)
-			
+
 			// Attempt reconnection for stream errors
 			go func() {
 				time.Sleep(5 * time.Second) // Wait a bit longer for stream errors
