@@ -36,6 +36,22 @@ RUN apt-get -o Acquire::Retries=3 update && \
     make -j"$(nproc)" && \
     make install
 
+# Build the WhatsApp Web bridge pinned to the same source revision used by the
+# two working local Codex channels. The Railway copy is patched to reject every
+# send, interactive-reply and logout request at the HTTP boundary.
+FROM golang:1.24-alpine AS whatsapp_build
+ARG WHATSAPP_MCP_REF=10d1551d7ec4d69444abde52ca018ec7e0069dcb
+RUN apk add --no-cache git ca-certificates gcc musl-dev sqlite-dev
+WORKDIR /src
+RUN git clone https://github.com/iamveene/whatsapp-mcp.git . && \
+    git checkout "${WHATSAPP_MCP_REF}"
+COPY patches/whatsapp-mcp-python.patch /tmp/whatsapp-mcp-python.patch
+COPY patches/whatsapp-bridge-readonly.patch /tmp/whatsapp-bridge-readonly.patch
+RUN git apply --ignore-space-change --ignore-whitespace /tmp/whatsapp-mcp-python.patch && \
+    git apply /tmp/whatsapp-bridge-readonly.patch && \
+    CGO_ENABLED=1 go build -ldflags="-w -s -extldflags '-static'" \
+        -o /out/whatsapp-bridge main.go
+
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 # Which hermes-agent revision to install. Accepts any git ref the upstream
@@ -83,6 +99,8 @@ RUN apt-get update && \
 # Prefer the fixed SQLite shared library and fail the image build unless both
 # the WAL-reset minimum and Hermes' trigram FTS5 requirement are satisfied.
 COPY --from=sqlite_build /opt/sqlite-fixed/lib/libsqlite3.so.3.53.4 /usr/local/lib/
+COPY --from=whatsapp_build /out/whatsapp-bridge /usr/local/bin/whatsapp-bridge-mcp
+COPY --from=whatsapp_build /src/whatsapp-mcp-server /opt/whatsapp-mcp/whatsapp-mcp-server
 RUN ln -sf libsqlite3.so.3.53.4 /usr/local/lib/libsqlite3.so.0 && \
     ln -sf libsqlite3.so.3.53.4 /usr/local/lib/libsqlite3.so && \
     printf '/usr/local/lib\n' > /etc/ld.so.conf.d/000-sqlite-fixed.conf && \
@@ -136,7 +154,10 @@ RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/h
 # Railway private service so its full-power Odoo credential is never exposed
 # to the agent container.
 RUN uv venv /opt/mcp/workspace && \
-    uv pip install --python /opt/mcp/workspace/bin/python --no-cache workspace-mcp==1.24.1
+    uv pip install --python /opt/mcp/workspace/bin/python --no-cache workspace-mcp==1.24.1 && \
+    uv venv /opt/mcp/whatsapp && \
+    uv pip install --python /opt/mcp/whatsapp/bin/python --no-cache \
+        /opt/whatsapp-mcp/whatsapp-mcp-server
 
 # Why pre-build ui-tui (and why we don't delete it after):
 # - The dashboard's embedded Chat tab spawns `node ui-tui/dist/entry.js`

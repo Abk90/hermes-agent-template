@@ -70,6 +70,33 @@ if [ -n "${WORKSPACE_MCP_GOOGLE_TOKEN_JSON_BOOTSTRAP:-}" ]; then
 fi
 unset WORKSPACE_MCP_GOOGLE_TOKEN_JSON_BOOTSTRAP
 
+# Run two fully isolated WhatsApp Web linked-device sessions on the persistent
+# volume. Their REST APIs stay inside the container, on separate loopback ports,
+# and the bridge itself enforces read-only mode even if a prompt tries to bypass
+# the MCP tool filter and call /api/send directly.
+start_whatsapp_bridge() {
+  local account="$1"
+  local port="$2"
+  local account_dir="/data/.hermes/whatsapp/${account}"
+  local log_file="/data/.hermes/logs/whatsapp-${account}.log"
+  mkdir -p "${account_dir}/store"
+  touch "${log_file}"
+  chmod 600 "${log_file}"
+  (
+    set +e
+    cd "${account_dir}"
+    while true; do
+      WHATSAPP_READ_ONLY=true /usr/local/bin/whatsapp-bridge-mcp -port "${port}"
+      bridge_exit=$?
+      printf 'WhatsApp bridge exited with code %s; restarting in 5 seconds\n' "${bridge_exit}"
+      sleep 5
+    done
+  ) >> "${log_file}" 2>&1 &
+}
+
+start_whatsapp_bridge pro 8180
+start_whatsapp_bridge personnel 8181
+
 # Clear any stale gateway PID file left over from the previous container.
 # `hermes gateway` writes /data/.hermes/gateway.pid on start but does not
 # remove it on SIGTERM. Since /data is a persistent volume, the file
