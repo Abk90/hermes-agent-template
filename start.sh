@@ -47,6 +47,28 @@ if [ ! -f /data/.hermes/auth.json ] && [ -n "${HERMES_AUTH_JSON_BOOTSTRAP}" ]; t
   printf '%s' "${HERMES_AUTH_JSON_BOOTSTRAP}" > /data/.hermes/auth.json
   chmod 600 /data/.hermes/auth.json
 fi
+unset HERMES_AUTH_JSON_BOOTSTRAP
+
+# Bootstrap the single Google Workspace credential onto the persistent volume.
+# The Railway secret is consumed only on the first boot; refreshed OAuth tokens
+# then stay in the file and are not overwritten by an older bootstrap value.
+if [ -n "${WORKSPACE_MCP_GOOGLE_TOKEN_JSON_BOOTSTRAP:-}" ]; then
+  case "${USER_GOOGLE_EMAIL:-}" in
+    ""|*[!A-Za-z0-9@._+-]*)
+      echo "Invalid or missing USER_GOOGLE_EMAIL for Workspace MCP" >&2
+      exit 1
+      ;;
+  esac
+  workspace_credentials_dir="${WORKSPACE_MCP_CREDENTIALS_DIR:-/data/.hermes/workspace-mcp/credentials}"
+  workspace_credentials_file="${workspace_credentials_dir}/${USER_GOOGLE_EMAIL}.json"
+  mkdir -p "${workspace_credentials_dir}"
+  chmod 700 "${workspace_credentials_dir}"
+  if [ ! -f "${workspace_credentials_file}" ]; then
+    printf '%s' "${WORKSPACE_MCP_GOOGLE_TOKEN_JSON_BOOTSTRAP}" > "${workspace_credentials_file}"
+    chmod 600 "${workspace_credentials_file}"
+  fi
+fi
+unset WORKSPACE_MCP_GOOGLE_TOKEN_JSON_BOOTSTRAP
 
 # Clear any stale gateway PID file left over from the previous container.
 # `hermes gateway` writes /data/.hermes/gateway.pid on start but does not
