@@ -760,6 +760,42 @@ def _has_xai_oauth_tokens() -> bool:
         return False
 
 
+def _has_configured_oauth_tokens() -> bool:
+    """Return whether the configured model provider has usable OAuth tokens.
+
+    The Railway wrapper historically treated only xAI OAuth as a provider when
+    deciding whether to auto-start the gateway. Hermes now supports several
+    OAuth-native inference providers, including ``openai-codex``. Those tokens
+    live in ``auth.json`` rather than ``.env``, so an otherwise complete Codex
+    setup was incorrectly classified as incomplete after every redeploy.
+    """
+    try:
+        from hermes_cli.config import load_config
+
+        model = load_config().get("model") or {}
+        provider = str(model.get("provider") or "").strip()
+        if not provider:
+            return False
+
+        auth_path = Path(HERMES_HOME) / "auth.json"
+        data = json.loads(auth_path.read_text())
+
+        state = (data.get("providers") or {}).get(provider) or {}
+        tokens = state.get("tokens") or {}
+        if tokens.get("access_token") and tokens.get("refresh_token"):
+            return True
+
+        entries = (data.get("credential_pool") or {}).get(provider) or []
+        return any(
+            isinstance(entry, dict)
+            and entry.get("access_token")
+            and entry.get("refresh_token")
+            for entry in entries
+        )
+    except Exception:
+        return False
+
+
 def _save_xai_auth_json(tokens: dict) -> None:
     """Write xAI OAuth tokens to auth.json in hermes's expected format."""
     auth_path = Path(HERMES_HOME) / "auth.json"
@@ -987,7 +1023,11 @@ def is_config_complete(data: dict[str, str] | None = None) -> bool:
     if data is None:
         data = read_env(ENV_FILE)
     has_model = bool(data.get("LLM_MODEL"))
-    has_provider = any(data.get(k) for k in PROVIDER_KEYS) or _has_xai_oauth_tokens()
+    has_provider = (
+        any(data.get(k) for k in PROVIDER_KEYS)
+        or _has_xai_oauth_tokens()
+        or _has_configured_oauth_tokens()
+    )
     return has_model and has_provider
 
 
