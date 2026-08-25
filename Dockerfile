@@ -39,13 +39,11 @@ RUN apt-get -o Acquire::Retries=3 update && \
 # Build the WhatsApp Web bridge pinned to the same source revision used by the
 # two working local Codex channels. The Railway copy is patched to reject every
 # send, interactive-reply and logout request at the HTTP boundary.
-FROM golang:1.24-alpine AS whatsapp_build
+FROM golang:1.26-alpine AS whatsapp_build
 RUN apk add --no-cache git ca-certificates gcc musl-dev sqlite-dev
 WORKDIR /src
 COPY vendor/whatsapp-mcp/ /src/
-COPY patches/whatsapp-bridge-readonly.patch /tmp/whatsapp-bridge-readonly.patch
-RUN git apply /tmp/whatsapp-bridge-readonly.patch && \
-    CGO_ENABLED=1 go build -ldflags="-w -s -extldflags '-static'" \
+RUN CGO_ENABLED=1 go build -ldflags="-w -s -extldflags '-static'" \
         -o /out/whatsapp-bridge main.go
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim

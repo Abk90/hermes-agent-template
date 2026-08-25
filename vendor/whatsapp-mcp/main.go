@@ -1030,6 +1030,10 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		if strings.EqualFold(os.Getenv("WHATSAPP_READ_ONLY"), "true") {
+			http.Error(w, "Sending is disabled on this read-only bridge", http.StatusForbidden)
+			return
+		}
 
 		// Parse the request body
 		var req SendMessageRequest
@@ -1151,6 +1155,10 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		if strings.EqualFold(os.Getenv("WHATSAPP_READ_ONLY"), "true") {
+			http.Error(w, "Logout is disabled on this read-only bridge", http.StatusForbidden)
+			return
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 
@@ -1240,6 +1248,10 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 		// Only allow POST requests
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if strings.EqualFold(os.Getenv("WHATSAPP_READ_ONLY"), "true") {
+			http.Error(w, "Interactive replies are disabled on this read-only bridge", http.StatusForbidden)
 			return
 		}
 
@@ -1474,7 +1486,7 @@ func startKeepalive(client *whatsmeow.Client, logger waLog.Logger, stopChan <-ch
 		case <-ticker.C:
 			if client.IsConnected() && client.IsLoggedIn() {
 				// Send presence available to keep session alive
-				err := client.SendPresence(types.PresenceAvailable)
+				err := client.SendPresence(context.Background(), types.PresenceAvailable)
 				if err != nil {
 					logger.Warnf("Failed to send keepalive presence: %v", err)
 				} else {
@@ -1765,7 +1777,7 @@ func GetChatName(client *whatsmeow.Client, messageStore *MessageStore, jid types
 
 		// If we didn't get a name, try group info
 		if name == "" {
-			groupInfo, err := client.GetGroupInfo(jid)
+			groupInfo, err := client.GetGroupInfo(context.Background(), jid)
 			if err == nil && groupInfo.Name != "" {
 				name = groupInfo.Name
 			} else {
