@@ -153,7 +153,7 @@ RUN uv venv /opt/mcp/workspace && \
     uv pip install --python /opt/mcp/workspace/bin/python --no-cache workspace-mcp==1.24.1 && \
     uv venv /opt/mcp/whatsapp && \
     uv pip install --python /opt/mcp/whatsapp/bin/python --no-cache \
-        /opt/whatsapp-mcp/whatsapp-mcp-server
+        "httpx>=0.28.1" "mcp[cli]>=1.6.0" "requests>=2.32.3"
 
 # Why pre-build ui-tui (and why we don't delete it after):
 # - The dashboard's embedded Chat tab spawns `node ui-tui/dist/entry.js`
