@@ -48,7 +48,9 @@ export INTERNAL_INTAKE_API_ENABLED=true
 python -m executive_os.intake_bootstrap
 python -m executive_os.intake_selftest
 
-hermes gateway >> /data/.hermes/logs/internal-intake-gateway.log 2>&1 &
+# Keep a persistent gateway log while mirroring it to Railway so an unhealthy
+# Telegram poller cannot hide behind a green API healthcheck.
+hermes gateway > >(tee -a /data/.hermes/logs/internal-intake-gateway.log) 2>&1 &
 gateway_pid=$!
 uvicorn executive_os.intake_api:create_app --factory --host 0.0.0.0 --port "${PORT:-8080}" --workers 1 &
 api_pid=$!

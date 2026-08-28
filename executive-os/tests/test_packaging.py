@@ -26,6 +26,13 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('HERMES_SERVICE_MODE:-', start)
         self.assertIn('exec /app/start-internal-intake.sh', start)
 
+    def test_internal_gateway_logs_are_visible_and_persistent(self) -> None:
+        start = (self.repo / "start-internal-intake.sh").read_text(encoding="utf-8")
+        self.assertIn(
+            'hermes gateway > >(tee -a /data/.hermes/logs/internal-intake-gateway.log) 2>&1 &',
+            start,
+        )
+
     def test_internal_intake_artifacts_are_packaged(self) -> None:
         root = self.repo / "executive-os"
         self.assertTrue((root / "schemas" / "request-pack-v1.schema.json").is_file())
