@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 try:
@@ -35,11 +36,18 @@ class IntakeBootstrapTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_bootstrap_installs_only_intake_toolset(self):
-        first = self.bootstrap(self.app, self.home)
-        second = self.bootstrap(self.app, self.home)
+        configured = {
+            "INTERNAL_INTAKE_INFERENCE_PROVIDER": "deepseek",
+            "INTERNAL_INTAKE_INFERENCE_MODEL": "deepseek-v4-pro",
+        }
+        with patch.dict("os.environ", configured, clear=False):
+            first = self.bootstrap(self.app, self.home)
+            second = self.bootstrap(self.app, self.home)
         self.assertEqual(first, {"mcp": "installed", "skill": "installed", "soul": "installed"})
         self.assertEqual(second, first)
         config = yaml.safe_load((self.home / "config.yaml").read_text(encoding="utf-8"))
+        self.assertEqual("deepseek", config["model"]["provider"])
+        self.assertEqual("deepseek-v4-pro", config["model"]["default"])
         self.assertEqual(["mcp-internal-intake"], config["toolsets"])
         self.assertEqual("off", config["browser"]["backend"])
         self.assertEqual(

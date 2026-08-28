@@ -56,6 +56,20 @@ def managed_intake_entry() -> dict[str, Any]:
 
 def _render_managed_config(existing: dict[str, Any]) -> dict[str, Any]:
     rendered = dict(existing)
+    inference_provider = os.environ.get("INTERNAL_INTAKE_INFERENCE_PROVIDER", "").strip()
+    inference_model = os.environ.get("INTERNAL_INTAKE_INFERENCE_MODEL", "").strip()
+    if bool(inference_provider) != bool(inference_model):
+        raise ValueError(
+            "INTERNAL_INTAKE_INFERENCE_PROVIDER and INTERNAL_INTAKE_INFERENCE_MODEL "
+            "must be configured together"
+        )
+    if inference_provider:
+        model = dict(rendered.get("model") or {})
+        model["provider"] = inference_provider
+        model["default"] = inference_model
+        for stale_key in ("base_url", "api_key", "api", "api_mode"):
+            model.pop(stale_key, None)
+        rendered["model"] = model
     servers = dict(rendered.get("mcp_servers") or {})
     servers["internal-intake"] = managed_intake_entry()
     rendered["mcp_servers"] = servers
