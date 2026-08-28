@@ -42,10 +42,13 @@ async def run_selftest() -> list[str]:
             async with ClientSession(reader, writer) as session:
                 await session.initialize()
                 discovered = await session.list_tools()
+                probe = await session.call_tool("connector_status", {})
 
     names = sorted(tool.name for tool in discovered.tools)
     if set(names) != EXPECTED_TOOLS:
         raise RuntimeError(f"Unexpected Executive OS MCP tools: {names}")
+    if probe.is_error:
+        raise RuntimeError("Executive OS connector_status probe returned an error")
     return names
 
 

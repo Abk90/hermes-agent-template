@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = ["PyYAML>=6.0.2,<7"]
 
 [project.optional-dependencies]
-mcp = ["mcp>=1.6.0,<2"]
+mcp = ["mcp==2.0.0"]
 
 [project.scripts]
 executive-os = "executive_os.cli:main"

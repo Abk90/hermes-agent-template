@@ -21,21 +21,29 @@ def _schema(properties: dict[str, Any], required: list[str] | None = None) -> di
 
 def build_server():
     try:
-        import mcp.types as types
-        from mcp.server import Server
+        from mcp.server import Server, ServerRequestContext
+        from mcp.types import (
+            CallToolRequestParams,
+            CallToolResult,
+            ListToolsResult,
+            PaginatedRequestParams,
+            TextContent,
+            Tool,
+        )
     except ImportError as exc:  # pragma: no cover - exercised in the Railway image
         raise RuntimeError("Install the optional 'mcp' dependency to run the MCP server") from exc
 
-    server = Server("belkora-executive-os")
     service = ExecutiveOSService()
 
-    @server.list_tools()
-    async def list_tools() -> list[types.Tool]:
-        return [
-            types.Tool(
+    async def list_tools(
+        _context: ServerRequestContext,
+        _params: PaginatedRequestParams | None,
+    ) -> ListToolsResult:
+        tools = [
+            Tool(
                 name="triage_request",
                 description="Qualify a request and persist it idempotently in the private ledger.",
-                inputSchema=_schema(
+                input_schema=_schema(
                     {
                         "payload_json": {"type": "string"},
                         "idempotency_key": {"type": "string", "minLength": 1},
@@ -44,28 +52,28 @@ def build_server():
                     ["payload_json", "idempotency_key", "actor"],
                 ),
             ),
-            types.Tool(
+            Tool(
                 name="list_executive_queue",
                 description="List open normalized requests ordered P0, P1, then P2.",
-                inputSchema=_schema(
+                input_schema=_schema(
                     {
                         "priorities_csv": {"type": "string", "default": "P0,P1,P2"},
                         "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
                     }
                 ),
             ),
-            types.Tool(
+            Tool(
                 name="why_request",
                 description="Return a request, its classification and append-only audit events.",
-                inputSchema=_schema(
+                input_schema=_schema(
                     {"request_id": {"type": "string", "minLength": 1}},
                     ["request_id"],
                 ),
             ),
-            types.Tool(
+            Tool(
                 name="transition_request",
                 description="Apply a validated ledger transition; never writes Odoo or OmniFocus.",
-                inputSchema=_schema(
+                input_schema=_schema(
                     {
                         "request_id": {"type": "string", "minLength": 1},
                         "new_status": {
@@ -89,16 +97,20 @@ def build_server():
                     ["request_id", "new_status", "actor", "justification"],
                 ),
             ),
-            types.Tool(
+            Tool(
                 name="connector_status",
                 description="Return connector freshness and failures recorded by deterministic probes.",
-                inputSchema=_schema({}),
+                input_schema=_schema({}),
             ),
         ]
+        return ListToolsResult(tools=tools)
 
-    @server.call_tool()
-    async def call_tool(name: str, arguments: dict[str, Any] | None) -> list[types.TextContent]:
-        args = arguments or {}
+    async def call_tool(
+        _context: ServerRequestContext,
+        params: CallToolRequestParams,
+    ) -> CallToolResult:
+        name = params.name
+        args = params.arguments or {}
         if name == "triage_request":
             payload: dict[str, Any] = json.loads(str(args["payload_json"]))
             result = service.triage_request(
@@ -129,14 +141,21 @@ def build_server():
         else:
             raise ValueError(f"Unknown tool: {name}")
 
-        return [
-            types.TextContent(
-                type="text",
-                text=json.dumps(result, ensure_ascii=False, sort_keys=True),
-            )
-        ]
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=json.dumps(result, ensure_ascii=False, sort_keys=True),
+                )
+            ]
+        )
 
-    return server
+    return Server(
+        "belkora-executive-os",
+        version="0.1.0",
+        on_list_tools=list_tools,
+        on_call_tool=call_tool,
+    )
 
 
 async def run_server() -> None:
