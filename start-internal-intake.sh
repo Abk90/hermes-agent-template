@@ -48,6 +48,30 @@ export INTERNAL_INTAKE_API_ENABLED=true
 python -m executive_os.intake_bootstrap
 python -m executive_os.intake_selftest
 
+# Fail closed before Railway reports the API healthy: validate the rotated bot
+# credential and outbound Bot API path without ever logging the token or URL.
+python - <<'PY'
+import json
+import os
+import sys
+import urllib.request
+
+token = os.environ["TELEGRAM_BOT_TOKEN"]
+try:
+    with urllib.request.urlopen(
+        f"https://api.telegram.org/bot{token}/getMe", timeout=15
+    ) as response:
+        payload = json.load(response)
+except Exception as exc:
+    print(f"[telegram-preflight] getMe failed: {type(exc).__name__}", file=sys.stderr)
+    raise SystemExit(1)
+result = payload.get("result") if isinstance(payload, dict) else None
+if not payload.get("ok") or not isinstance(result, dict):
+    print("[telegram-preflight] getMe returned an invalid response", file=sys.stderr)
+    raise SystemExit(1)
+print(f"[telegram-preflight] getMe ok bot_id={result.get('id')}")
+PY
+
 # Keep a persistent gateway log while mirroring it to Railway so an unhealthy
 # Telegram poller cannot hide behind a green API healthcheck.
 hermes gateway > >(tee -a /data/.hermes/logs/internal-intake-gateway.log) 2>&1 &
