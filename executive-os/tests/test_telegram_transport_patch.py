@@ -15,6 +15,7 @@ class TelegramTransportPatchTests(unittest.TestCase):
         patched = patch_text(source)
         self.assertIn('command_name == "/start"', patched)
         self.assertIn("MessageType.TEXT", patched)
+        self.assertIn('else "ACTIVATE_INTERNAL_INTAKE"', patched)
         self.assertIn("TRUSTED_TELEGRAM_CONTEXT", patched)
         self.assertIn("telegram_user_id={source.user_id}", patched)
         self.assertIn("chat_id={source.chat_id}", patched)

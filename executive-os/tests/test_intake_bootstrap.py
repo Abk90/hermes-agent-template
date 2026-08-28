@@ -71,6 +71,16 @@ class IntakeBootstrapTests(unittest.TestCase):
             ],
             config["mcp_servers"]["internal-intake"]["tools"]["include"],
         )
+        mcp_env = config["mcp_servers"]["internal-intake"]["env"]
+        self.assertEqual(
+            "${INTERNAL_INTAKE_DEVICE_CREDENTIALS_JSON}",
+            mcp_env["INTERNAL_INTAKE_DEVICE_CREDENTIALS_JSON"],
+        )
+        self.assertEqual(
+            "${INTERNAL_INTAKE_CONTEXT_SIGNING_KEY}",
+            mcp_env["INTERNAL_INTAKE_CONTEXT_SIGNING_KEY"],
+        )
+        self.assertEqual("${ODOO_MCP_URL}", mcp_env["ODOO_MCP_URL"])
 
     def test_dedicated_service_can_adopt_seeded_unmanaged_soul_with_backup(self):
         soul = self.home / "SOUL.md"

@@ -23,7 +23,12 @@ COMMAND_REPLACEMENT = """        await self._ensure_forum_commands(msg)
             and command_name == "/start"
         ):
             event = self._build_message_event(msg, MessageType.TEXT, update_id=update.update_id)
-            event.text = self._clean_bot_trigger_text(event.text)
+            start_parts = (msg.text or "").split(maxsplit=1)
+            event.text = (
+                f"ACTIVATE_INTERNAL_INTAKE start_token={start_parts[1]}"
+                if len(start_parts) == 2
+                else "ACTIVATE_INTERNAL_INTAKE"
+            )
             event = self._apply_telegram_group_observe_attribution(event)
             await self.handle_message(event)
             return
