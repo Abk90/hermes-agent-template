@@ -89,6 +89,44 @@ class IntakeBootstrapTests(unittest.TestCase):
             (self.home / "SOUL.md.pre-internal-intake.bak").read_text(encoding="utf-8"),
         )
 
+    def test_explicit_reconcile_updates_managed_config_and_preserves_other_keys(self):
+        initial = {
+            "INTERNAL_INTAKE_INFERENCE_PROVIDER": "deepseek",
+            "INTERNAL_INTAKE_INFERENCE_MODEL": "deepseek-v4-pro",
+            "TELEGRAM_ALLOWED_USERS": "123456",
+            "INTERNAL_INTAKE_TELEGRAM_ADMIN_USERS": "123456",
+        }
+        with patch.dict("os.environ", initial, clear=False):
+            first = self.bootstrap(self.app, self.home)
+        self.assertEqual("installed", first["mcp"])
+
+        config_path = self.home / "config.yaml"
+        changed = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        changed["display"] = {"theme": "dark"}
+        config_path.write_text(
+            yaml.safe_dump(changed, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+
+        migrated = {
+            "INTERNAL_INTAKE_INFERENCE_PROVIDER": "anthropic",
+            "INTERNAL_INTAKE_INFERENCE_MODEL": "claude-sonnet-4-6",
+            "INTERNAL_INTAKE_RECONCILE_MANAGED_CONFIG": "true",
+            "TELEGRAM_ALLOWED_USERS": "123456",
+            "INTERNAL_INTAKE_TELEGRAM_ADMIN_USERS": "123456",
+        }
+        with patch.dict("os.environ", migrated, clear=False):
+            result = self.bootstrap(self.app, self.home)
+
+        self.assertEqual("installed", result["mcp"])
+        rendered = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        self.assertEqual("anthropic", rendered["model"]["provider"])
+        self.assertEqual("claude-sonnet-4-6", rendered["model"]["default"])
+        self.assertEqual({"theme": "dark"}, rendered["display"])
+        self.assertTrue(
+            (self.home / "config.yaml.pre-internal-intake-reconcile.bak").exists()
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

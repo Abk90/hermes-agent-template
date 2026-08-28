@@ -157,14 +157,27 @@ def bootstrap_intake(app_root: Path, hermes_home: Path) -> dict[str, Any]:
         raise ValueError("Hermes config.yaml root must be a mapping")
     current = parsed or {}
     previous_config_digest = state.get("config_digest")
-    if previous_config_digest and _canonical_digest(current) != previous_config_digest:
+    current_config_digest = _canonical_digest(current)
+    reconcile_managed_config = _enabled(
+        os.environ.get("INTERNAL_INTAKE_RECONCILE_MANAGED_CONFIG")
+    )
+    if (
+        previous_config_digest
+        and current_config_digest != previous_config_digest
+        and not reconcile_managed_config
+    ):
         config_result = "preserved-local-change"
     elif not previous_config_digest and current.get("mcp_servers", {}).get("internal-intake"):
         config_result = "preserved-unmanaged"
     else:
         managed = _render_managed_config(current)
         if config_path.exists():
-            backup = config_path.with_name("config.yaml.pre-internal-intake.bak")
+            backup_name = (
+                "config.yaml.pre-internal-intake-reconcile.bak"
+                if previous_config_digest and current_config_digest != previous_config_digest
+                else "config.yaml.pre-internal-intake.bak"
+            )
+            backup = config_path.with_name(backup_name)
             if not backup.exists():
                 shutil.copy2(config_path, backup)
                 os.chmod(backup, 0o600)
@@ -183,9 +196,14 @@ def main() -> int:
     app_root = Path(os.environ.get("EXECUTIVE_OS_ROOT", "/app/executive-os"))
     hermes_home = Path(os.environ.get("HERMES_HOME", "/data/.hermes"))
     result = bootstrap_intake(app_root, hermes_home)
-    print(json.dumps(result, sort_keys=True))
+    print(json.dumps(result, sort_keys=True), flush=True)
     if any(result[key] != "installed" for key in ("mcp", "skill", "soul")):
-        print("Internal intake managed files were not installed cleanly", file=sys.stderr)
+        print(
+            "Internal intake managed files were not installed cleanly: "
+            + json.dumps(result, sort_keys=True),
+            file=sys.stderr,
+            flush=True,
+        )
         return 2
     return 0
 
