@@ -39,6 +39,7 @@ class PackagingTests(unittest.TestCase):
 
     def test_internal_intake_artifacts_are_packaged(self) -> None:
         root = self.repo / "executive-os"
+        self.assertTrue((root / "src" / "sitecustomize.py").is_file())
         self.assertTrue((root / "schemas" / "request-pack-v1.schema.json").is_file())
         self.assertTrue(
             (root / "portable-skills" / "bureau-ahmed-request" / "SKILL.md").is_file()
