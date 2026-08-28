@@ -29,6 +29,13 @@ def _enabled(value: str | None) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _numeric_ids(value: str | None, *, label: str) -> list[str]:
+    ids = [item.strip() for item in str(value or "").split(",") if item.strip()]
+    if any(not item.isdigit() or int(item) <= 0 for item in ids):
+        raise ValueError(f"{label} must contain only positive numeric Telegram user IDs")
+    return list(dict.fromkeys(ids))
+
+
 def managed_intake_entry() -> dict[str, Any]:
     return {
         "command": "/usr/local/bin/python",
@@ -70,6 +77,35 @@ def _render_managed_config(existing: dict[str, Any]) -> dict[str, Any]:
         for stale_key in ("base_url", "api_key", "api", "api_mode"):
             model.pop(stale_key, None)
         rendered["model"] = model
+    allowed_users = _numeric_ids(os.environ.get("TELEGRAM_ALLOWED_USERS"), label="TELEGRAM_ALLOWED_USERS")
+    admin_users = _numeric_ids(
+        os.environ.get("INTERNAL_INTAKE_TELEGRAM_ADMIN_USERS"),
+        label="INTERNAL_INTAKE_TELEGRAM_ADMIN_USERS",
+    )
+    if not allowed_users:
+        raise ValueError("TELEGRAM_ALLOWED_USERS is required for internal intake")
+    if any(admin not in allowed_users for admin in admin_users):
+        raise ValueError("Every internal intake Telegram admin must also be allowlisted")
+
+    gateway = dict(rendered.get("gateway") or {})
+    platforms = dict(gateway.get("platforms") or {})
+    telegram = dict(platforms.get("telegram") or {})
+    extra = dict(telegram.get("extra") or {})
+    extra.update(
+        {
+            "allow_from": allowed_users,
+            "allow_admin_from": admin_users,
+            "user_allowed_commands": ["start"],
+            "group_allow_from": [],
+            "group_allowed_chats": [],
+            "group_allow_admin_from": [],
+            "group_user_allowed_commands": [],
+        }
+    )
+    telegram["extra"] = extra
+    platforms["telegram"] = telegram
+    gateway["platforms"] = platforms
+    rendered["gateway"] = gateway
     servers = dict(rendered.get("mcp_servers") or {})
     servers["internal-intake"] = managed_intake_entry()
     rendered["mcp_servers"] = servers

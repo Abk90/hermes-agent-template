@@ -39,6 +39,8 @@ class IntakeBootstrapTests(unittest.TestCase):
         configured = {
             "INTERNAL_INTAKE_INFERENCE_PROVIDER": "deepseek",
             "INTERNAL_INTAKE_INFERENCE_MODEL": "deepseek-v4-pro",
+            "TELEGRAM_ALLOWED_USERS": "123456,654321",
+            "INTERNAL_INTAKE_TELEGRAM_ADMIN_USERS": "123456",
         }
         with patch.dict("os.environ", configured, clear=False):
             first = self.bootstrap(self.app, self.home)
@@ -48,6 +50,12 @@ class IntakeBootstrapTests(unittest.TestCase):
         config = yaml.safe_load((self.home / "config.yaml").read_text(encoding="utf-8"))
         self.assertEqual("deepseek", config["model"]["provider"])
         self.assertEqual("deepseek-v4-pro", config["model"]["default"])
+        telegram_extra = config["gateway"]["platforms"]["telegram"]["extra"]
+        self.assertEqual(["123456", "654321"], telegram_extra["allow_from"])
+        self.assertEqual(["123456"], telegram_extra["allow_admin_from"])
+        self.assertEqual(["start"], telegram_extra["user_allowed_commands"])
+        self.assertEqual([], telegram_extra["group_allow_from"])
+        self.assertEqual([], telegram_extra["group_user_allowed_commands"])
         self.assertEqual(["mcp-internal-intake"], config["toolsets"])
         self.assertEqual("off", config["browser"]["backend"])
         self.assertEqual(
