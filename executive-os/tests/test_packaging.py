@@ -21,6 +21,11 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("COPY executive-os/ /app/executive-os/", dockerfile)
         self.assertIn("COPY start-internal-intake.sh /app/start-internal-intake.sh", dockerfile)
 
+    def test_shared_image_dispatches_internal_intake_by_service_role(self) -> None:
+        start = (self.repo / "start.sh").read_text(encoding="utf-8")
+        self.assertIn('HERMES_SERVICE_MODE:-', start)
+        self.assertIn('exec /app/start-internal-intake.sh', start)
+
     def test_internal_intake_artifacts_are_packaged(self) -> None:
         root = self.repo / "executive-os"
         self.assertTrue((root / "schemas" / "request-pack-v1.schema.json").is_file())

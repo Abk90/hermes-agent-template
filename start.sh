@@ -1,6 +1,14 @@
 #!/bin/bash
 set -e
 
+# Railway can retain the Dockerfile CMD when two services share this repository,
+# even when the second service selects another railway config file. Keep the
+# service role explicit so the internal intake never falls through to the Ahmed
+# dashboard/gateway process.
+if [ "${HERMES_SERVICE_MODE:-}" = "internal-intake" ]; then
+  exec /app/start-internal-intake.sh
+fi
+
 # Mirror dashboard-ref-only's startup: create every directory hermes expects
 # and seed a default config.yaml if the volume is empty. Without these,
 # `hermes dashboard` endpoints that hit logs/, sessions/, cron/, etc. can fail
