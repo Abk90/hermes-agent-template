@@ -44,6 +44,7 @@ fi
 # overwrite locally changed managed skills or an unmanaged MCP entry.
 if [ "${EXECUTIVE_OS_ENABLED:-false}" = "true" ]; then
   python -m executive_os.bootstrap
+  python -m executive_os.selftest
 fi
 
 # Bootstrap OAuth tokens from env var (e.g. xAI Grok SuperGrok).

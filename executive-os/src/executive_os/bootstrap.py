@@ -63,12 +63,15 @@ def install_managed_skill(source: Path, destination: Path) -> str:
 
 def managed_mcp_entry() -> dict[str, Any]:
     return {
-        "command": "python",
+        "command": "/usr/local/bin/python",
         "args": ["-m", "executive_os.mcp_server"],
         "env": {
             "PYTHONPATH": "/app/executive-os/src",
             "EXECUTIVE_OS_CONFIG": "/app/executive-os/config/executive-os.toml",
             "EXECUTIVE_OS_DB": "/data/.hermes/executive-os/ledger.sqlite3",
+            "HOME": "/data",
+            "HERMES_HOME": "/data/.hermes",
+            "LANG": "C.UTF-8",
         },
         "enabled": True,
         "timeout": 60,

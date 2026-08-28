@@ -52,6 +52,10 @@ class BootstrapTests(unittest.TestCase):
             ],
             config["mcp_servers"]["executive_os"]["tools"]["include"],
         )
+        self.assertEqual(
+            "/usr/local/bin/python",
+            config["mcp_servers"]["executive_os"]["command"],
+        )
         self.assertTrue((self.home / "config.yaml.pre-executive-os.bak").exists())
 
     def test_user_modified_skill_is_preserved(self) -> None:
