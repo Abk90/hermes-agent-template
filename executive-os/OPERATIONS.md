@@ -9,7 +9,7 @@
 - MCP local : `executive_os`, cinq outils whitelistes ;
 - flag de deploiement : `EXECUTIVE_OS_ENABLED=true`.
 
-Le bootstrap s'execute avant le gateway. Il sauvegarde une fois `config.yaml`, deep-merge le serveur MCP et preserve les skills modifiees localement. Une entree MCP existante non geree ou modifiee fait echouer le demarrage plutot que d'etre ecrasee.
+Le bootstrap s'execute avant le gateway. Il sauvegarde une fois `config.yaml`, deep-merge le serveur MCP et preserve les skills modifiees localement. Une entree MCP existante non geree ou modifiee fait echouer le demarrage plutot que d'etre ecrasee. Un self-test bloquant connecte ensuite un client MCP 2, decouvre les cinq outils et appelle `connector_status` ; le gateway ne demarre pas si ce test echoue.
 
 ## Controle quotidien
 

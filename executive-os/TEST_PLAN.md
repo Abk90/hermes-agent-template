@@ -2,9 +2,9 @@
 
 ## Automatises maintenant
 
-La suite couvre : classification P0-P4, clarification d'une urgence vague, routes procedure/delegation/Odoo/OmniFocus, absence de doublon OmniFocus pour une approbation, idempotence, audit append-only, transitions invalides et etat connecteur.
+Les 24 tests locaux couvrent : classification P0-P4, clarification d'une urgence vague, routes procedure/delegation/Odoo/OmniFocus, absence de doublon OmniFocus pour une approbation, idempotence, audit append-only, transitions invalides, etat connecteur, bootstrap et contexte d'image.
 
-Le bootstrap est teste pour la fusion non destructive, l'idempotence et la preservation des modifications locales. Dans un environnement sans PyYAML, ces tests sont explicitement skips ; l'image Railway installe la dependance.
+Le bootstrap est teste pour la fusion non destructive, l'idempotence et la preservation des modifications locales. Le MCP est aussi teste avec la meme version 2.0.0 qu'Hermes 2026.8.19 : handshake, cinq outils exacts et appel de lecture `connector_status`.
 
 ## Matrice MVP
 
@@ -29,7 +29,7 @@ Le bootstrap est teste pour la fusion non destructive, l'idempotence et la prese
 2. build conteneur si le runtime Docker local est disponible ;
 3. deploiement depuis le commit exact ;
 4. statut Railway `SUCCESS`, `/health` HTTP 200 ;
-5. test MCP live : connexion puis cinq outils exacts ;
+5. self-test conteneur et test MCP live : connexion, cinq outils exacts et appel `connector_status` ;
 6. inventaire des trois skills geres ;
 7. Odoo : `ODOO_YOLO=read`, whitelist cinq lectures ;
 8. redemarrage controle et second test MCP pour prouver la persistance/idempotence ;

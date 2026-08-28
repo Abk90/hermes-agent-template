@@ -15,9 +15,23 @@ Les quatre raisons principales sont :
 1. la production n'execute qu'un profil Hermes `default`, puissant et reserve de fait a Ahmed ;
 2. aucun Bot `Bureau d'Ahmed`, skill de triage, ledger executif ou cron metier n'est versionne ;
 3. l'integration OmniFocus existante est locale au Mac et ne peut pas fonctionner directement dans le conteneur Linux Railway ;
-4. la protection Odoo a derive : au 28 aout, le serveur est en `ODOO_YOLO=true` et Hermes expose trois outils d'ecriture Odoo en plus des outils de lecture.
+4. la protection Odoo avait derive : au debut de l'audit du 28 aout, le serveur etait en `ODOO_YOLO=true` et Hermes exposait trois outils d'ecriture Odoo en plus des outils de lecture.
 
-La priorite immediate est donc : remettre Odoo en lecture seule, conserver le bot actuel comme canal executif d'Ahmed, construire le ledger et les skills en mode observation, puis creer le canal collaborateurs dans un service/profil isole avec un token Telegram et une allowlist distincts.
+La priorite immediate etait donc : remettre Odoo en lecture seule, conserver le bot actuel comme canal executif d'Ahmed, construire le ledger et les skills en mode observation, puis creer le canal collaborateurs dans un service/profil isole avec un token Telegram et une allowlist distincts.
+
+## Correction et deploiement apres audit
+
+La Phase 1 executive a ete deployee le 28 aout sur le service existant, sans Bot collaborateurs ni cron nouveau :
+
+- deploiement fonctionnel de reference `1ab4aba4-99c1-46a4-8677-f10c6672e4de`, commit runtime `3825045fad71069ffa1ff04fc6027598452b7c38`, statut `SUCCESS` ;
+- self-test conteneur reussi : connexion MCP 2, decouverte des cinq outils et appel de `connector_status` ;
+- API Hermes : MCP `executive_os` testable, cinq outils exacts, zero ressource et zero prompt ;
+- skills `executive-dispatch`, `odoo-approval-review` et `omnifocus-executive` presents et actifs ;
+- Odoo : `ODOO_YOLO=read` et whitelist Hermes limitee aux cinq lectures ;
+- Hermes 0.20.5, gateway `running`, Telegram `connected`, aucune erreur de plateforme ;
+- aucun poll Odoo, relais OmniFocus, Bot interne ou ecriture sensible active.
+
+Le test brut du serveur Odoo continue d'annoncer ses neuf schemas, y compris quatre ecritures. Le mode `read` les refuse a l'execution, mais la whitelist Hermes reste donc une barriere obligatoire : les schemas d'ecriture ne sont pas enregistres pour l'agent.
 
 ## Etat live verifie
 
@@ -26,7 +40,7 @@ La priorite immediate est donc : remettre Odoo en lecture seule, conserver le bo
 | Projet Railway | `hermes-belkora` (`9007876b-7f82-4e8d-91ea-4412fbda1e0a`) | CLI Railway avec projet et environnement explicites |
 | Service | `hermes-agent` (`0b6e2847-9cdd-4eb2-8ee0-0aa2dba762f6`) | CLI Railway |
 | Environnement | `production` (`7511c801-16c0-4460-bb5c-625d64d807e3`) | CLI Railway |
-| Deploiement actif | `f234ac74-d6c2-4de9-a3d9-22f1b04dcd0a`, `SUCCESS` | Commit `826b19c67b8666a42104f4a28d5022a262a9dcb9` |
+| Deploiement Phase 1 de reference | `1ab4aba4-99c1-46a4-8677-f10c6672e4de`, `SUCCESS` | Commit runtime `3825045fad71069ffa1ff04fc6027598452b7c38` |
 | Source | `Abk90/hermes-agent-template@main` | Railway + depot local propre avant travaux |
 | Hermes | `0.20.5`, release `2026.8.19`, config v38 | API native authentifiee |
 | Mode gateway | `single` | Un seul profil live : `default` |
@@ -87,7 +101,7 @@ Sources amont consultees :
 
 ## Profils, Bots, skills, plugins et cron actuels
 
-### Confirme live
+### Confirme live au debut de l'audit
 
 - Un seul profil live existe : `default`.
 - Le gateway fonctionne en mode `single`.
@@ -98,7 +112,7 @@ Sources amont consultees :
 - Huit cron jobs existent : quatre actifs, trois termines et un pause. Deux jobs actifs sont en `blocked_config`, avec dix et quatre echecs consecutifs ; deux autres ont un dernier resultat `ok`.
 - `cron.allow_agent_scheduling=false` et `approvals.cron_mode=deny`. Les jobs deja enregistres continuent neanmoins d'etre planifies.
 - Le fuseau Hermes est vide : les horaires ressortent en UTC, a corriger avant les batchs Casablanca.
-- Le depot ne versionne aucun profil ou Bot metier, aucun prompt `Bureau d'Ahmed`, aucun skill executif ni hook metier.
+- Le depot ne versionnait aucun profil ou Bot metier, aucun prompt `Bureau d'Ahmed`, aucun skill executif ni hook metier. La correction a depuis versionne les profils cibles et quatre skills, dont trois installes sur le profil executif.
 - Hermes conserve ces composants sur le volume ; le depot ignore volontairement l'etat runtime des skills.
 - Quatre MCP sont actives : Google Workspace read-only, Odoo prive, WhatsApp Pro et WhatsApp personnel. Chaque bridge WhatsApp expose huit outils de lecture.
 - Aucun MCP, skill, plugin, toolset ou cron OmniFocus n'est deploye.
@@ -149,17 +163,17 @@ Consequences :
 - `call_model_method` desactive.
 - Une ancienne note du 25 aout indiquait `ODOO_YOLO=read` et cinq outils de lecture exposes.
 
-### Derive live du 28 aout
+### Derive observee puis corrigee le 28 aout
 
 La configuration actuelle n'est plus celle du 25 aout :
 
-- `ODOO_YOLO=true` ; dans le contrat du serveur 0.7.1, `true` signifie acces lecture/ecriture via XML-RPC, sous les ACL et record rules du compte Odoo ;
+- `ODOO_YOLO=true` etait actif ; dans le contrat du serveur 0.7.1, `true` signifie acces lecture/ecriture via XML-RPC, sous les ACL et record rules du compte Odoo ;
 - le serveur annonce neuf outils ;
 - Hermes en expose huit : cinq lectures plus `create_record`, `update_record` et `post_message` ;
 - seul `delete_record` est filtre ;
 - aucune ecriture n'a ete effectuee pendant l'audit.
 
-Cette derive contredit directement la Phase 1 demandee. Elle doit etre corrigee avant tout cron Odoo ou ouverture du systeme aux collaborateurs.
+Cette derive contredisait directement la Phase 1 demandee. Elle a ete corrigee avant le deploiement du MVP : variable serveur `read`, nouveau deploiement Odoo reussi, whitelist cliente relue apres le deploiement Hermes. Aucun outil d'ecriture n'a ete appele.
 
 Autre contradiction a conserver : la mission parle d'Odoo 18, alors que l'instance publique verifiee aujourd'hui repond comme Odoo 19.0+e et le depot Assistant designe Odoo 19 comme source courante. Aucun developpement ne doit etre fige sur un schema Odoo 18 sans arbitrage.
 
@@ -191,7 +205,7 @@ Une ancienne valeur sensible est egalement encore presente en clair dans `SESSIO
 
 ### Critiques — avant tout pilote collaborateur
 
-1. Odoo est en mode full YOLO et trois outils d'ecriture sont visibles par Hermes.
+1. Odoo etait en mode full YOLO et trois outils d'ecriture etaient visibles par Hermes — **corrige avant le MVP**.
 2. Un seul profil puissant contient le contexte prive d'Ahmed.
 3. Aucun ledger idempotent n'empeche les doublons apres retry ou redemarrage.
 4. Le connecteur OmniFocus existant inclut des ecritures et n'est pas filtrable nativement.

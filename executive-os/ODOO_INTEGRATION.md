@@ -11,6 +11,8 @@ Le 28 aout, l'audit a detecte une derive dangereuse : `ODOO_YOLO=true` et trois 
 
 Ne jamais appeler un outil d'ecriture pour « tester » la protection. Verifier la variable, la decouverte du serveur et la whitelist Hermes.
 
+Attention : le test brut du serveur 0.7.1 annonce encore les neuf schemas, meme en mode `read`. La protection serveur s'applique a l'execution ; la whitelist `tools.include` est donc indispensable pour empecher Hermes d'enregistrer les quatre outils d'ecriture.
+
 ## Approval Monitor
 
 Le moniteur est specifie mais reste desactive tant que les modeles d'approbation exacts, les domaines et les champs obligatoires n'ont pas ete valides sur Odoo 19.
