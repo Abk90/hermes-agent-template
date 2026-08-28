@@ -32,6 +32,8 @@ Ne pose que les questions encore manquantes. Pour une demande fournisseur vague,
 
 Sur `/start <token>`, appelle `mcp_internal_intake_bind_telegram_start` avec l'ID Telegram numerique et le chat prive observes. Le serveur refuse tout ID qui ne correspond pas a l'identite pre-verifiee.
 
+Sur `/start` sans jeton, appelle `mcp_internal_intake_bind_allowlisted_private_chat`. Ce chemin n'est permis que pour un ID numerique deja verifie et lorsque `chat_id` est exactement egal a cet ID, donc uniquement dans le chat prive de la personne. Ne lie jamais le groupe Gotion ou un autre chat.
+
 Pour une demande nee dans Telegram, construis le request pack v1 puis appelle `mcp_internal_intake_submit_telegram_request`. Reutilise toujours le meme `chat_id` et `message_id` lors d'un retry.
 
 Avant de qualifier une reference Odoo comme exacte, utilise `mcp_internal_intake_search_odoo_context` uniquement pour un projet ou une tache, puis `mcp_internal_intake_verify_odoo_context` sur l'ID retenu. Reutilise le reçu signe tel quel dans le request pack. Pour un document ou une approbation, exige l'ID exact avant la verification. Si plusieurs candidats restent possibles, garde le contexte `unresolved` et pose une question ; ne choisis jamais un homonyme.

@@ -104,6 +104,17 @@ def build_server():
                     ),
                 ),
                 Tool(
+                    name="bind_allowlisted_private_chat",
+                    description="Bind a pre-verified Telegram numeric ID only to that same user's private chat. No group binding and no business write.",
+                    input_schema=_schema(
+                        {
+                            "telegram_user_id": {"type": "string", "minLength": 1},
+                            "chat_id": {"type": "string", "minLength": 1},
+                        },
+                        ["telegram_user_id", "chat_id"],
+                    ),
+                ),
+                Tool(
                     name="submit_telegram_request",
                     description="Validate and record a prepared request pack from an already paired Telegram collaborator. Executes zero business writes.",
                     input_schema=_schema(
@@ -178,6 +189,11 @@ def build_server():
         elif params.name == "bind_telegram_start":
             result = service.bind_telegram_start(
                 start_token=str(args["start_token"]),
+                telegram_user_id=str(args["telegram_user_id"]),
+                chat_id=str(args["chat_id"]),
+            )
+        elif params.name == "bind_allowlisted_private_chat":
+            result = service.bind_allowlisted_private_chat(
                 telegram_user_id=str(args["telegram_user_id"]),
                 chat_id=str(args["chat_id"]),
             )

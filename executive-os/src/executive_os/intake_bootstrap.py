@@ -14,6 +14,7 @@ from .bootstrap import _atomic_text, _canonical_digest, install_managed_skill
 
 
 INTAKE_MCP_TOOLS = (
+    "bind_allowlisted_private_chat",
     "search_odoo_context",
     "verify_odoo_context",
     "bind_telegram_start",

@@ -24,7 +24,7 @@ Le modèle aide à rechercher, comparer et structurer. Le serveur reste l'autori
 6. L'API retourne un lien privé `t.me/<bot>?start=<jeton-unique>`.
 7. Le collaborateur ouvre ce lien avec son compte Telegram pré-vérifié. Le bot rattache le chat privé au même `request_id` ; les précisions suivantes complètent le dossier existant.
 
-Une demande issue de Telegram n'est acceptée qu'après cet appairage. Telegram est la conversation ; Odoo demeure la source métier.
+Une demande issue de Telegram n'est acceptée qu'après appairage. Un collaborateur deja pre-verifie peut aussi envoyer `/start` sans jeton : le serveur ne l'accepte que depuis son propre chat prive, jamais depuis le groupe Gotion. Telegram est la conversation ; Odoo demeure la source métier.
 
 ## Séparation Railway
 

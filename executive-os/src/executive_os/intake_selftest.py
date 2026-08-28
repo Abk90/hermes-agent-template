@@ -7,6 +7,7 @@ import sys
 
 
 EXPECTED_TOOLS = {
+    "bind_allowlisted_private_chat",
     "search_odoo_context",
     "verify_odoo_context",
     "bind_telegram_start",

@@ -122,6 +122,31 @@ class IntakeTests(unittest.TestCase):
         self.assertEqual(self.identity.requester_id, bound["requester_id"])
         self.assertEqual(0, bound["writes_executed"])
 
+    def test_allowlisted_telegram_identity_can_bind_only_its_private_chat(self):
+        with self.assertRaises(IntakePermissionError):
+            self.service.bind_allowlisted_private_chat(
+                telegram_user_id="not-allowlisted",
+                chat_id="not-allowlisted",
+            )
+        with self.assertRaisesRegex(IntakePermissionError, "private chat"):
+            self.service.bind_allowlisted_private_chat(
+                telegram_user_id="123456",
+                chat_id="-100999",
+            )
+        bound = self.service.bind_allowlisted_private_chat(
+            telegram_user_id="123456",
+            chat_id="123456",
+        )
+        self.assertEqual(self.identity.requester_id, bound["requester_id"])
+        self.assertEqual("123456", bound["chat_id"])
+        self.assertEqual(0, bound["writes_executed"])
+
+        rebound = self.service.bind_allowlisted_private_chat(
+            telegram_user_id="123456",
+            chat_id="123456",
+        )
+        self.assertEqual(self.identity.requester_id, rebound["requester_id"])
+
     def test_revision_closes_preparation_gaps(self):
         incomplete = self.pack()
         incomplete["business_context"]["context_status"] = "unresolved"

@@ -335,6 +335,26 @@ class InternalIntakeService:
             raise IntakePermissionError("Telegram identity does not match request owner")
         return {**result, "writes_executed": 0}
 
+    def bind_allowlisted_private_chat(
+        self,
+        *,
+        telegram_user_id: str,
+        chat_id: str,
+    ) -> dict[str, Any]:
+        identity = self.registry.by_telegram_user_id(telegram_user_id)
+        if not identity:
+            raise IntakePermissionError("Telegram identity is not on the verified allowlist")
+        try:
+            result = self.ledger.bind_allowlisted_private_chat(
+                requester_id=identity.requester_id,
+                telegram_user_id=str(telegram_user_id),
+                chat_id=str(chat_id),
+                actor=f"telegram:{telegram_user_id}",
+            )
+        except PermissionError as exc:
+            raise IntakePermissionError(str(exc)) from exc
+        return {**result, "writes_executed": 0}
+
     def submit_telegram_pack(
         self,
         pack: dict[str, Any],

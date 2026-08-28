@@ -663,6 +663,74 @@ class Ledger:
                 "verified_at": now,
             }
 
+    def bind_allowlisted_private_chat(
+        self,
+        *,
+        requester_id: str,
+        telegram_user_id: str,
+        chat_id: str,
+        actor: str,
+    ) -> dict[str, Any]:
+        """Bind a pre-verified Telegram identity to its own private chat.
+
+        Telegram private chats use the human user's numeric ID as the chat ID.
+        Requiring that equality prevents a verified collaborator from binding a
+        group or another person's private chat without an API continuation token.
+        """
+        if str(chat_id) != str(telegram_user_id):
+            raise PermissionError("Telegram onboarding must happen in the user's private chat")
+
+        now = utc_now()
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conflicting = conn.execute(
+                """
+                SELECT requester_id FROM telegram_bindings
+                WHERE telegram_user_id = ? AND requester_id != ? AND active = 1
+                """,
+                (str(telegram_user_id), requester_id),
+            ).fetchone()
+            if conflicting:
+                raise PermissionError("Telegram identity is already bound to another collaborator")
+
+            existing = conn.execute(
+                "SELECT * FROM telegram_bindings WHERE requester_id = ?",
+                (requester_id,),
+            ).fetchone()
+            if existing and str(existing["telegram_user_id"]) != str(telegram_user_id):
+                raise PermissionError("Collaborator is already bound to another Telegram identity")
+
+            conn.execute(
+                """
+                INSERT INTO telegram_bindings (
+                    requester_id, telegram_user_id, chat_id, verified_at, active
+                ) VALUES (?, ?, ?, ?, 1)
+                ON CONFLICT(requester_id) DO UPDATE SET
+                    chat_id=excluded.chat_id,
+                    verified_at=excluded.verified_at,
+                    active=1
+                """,
+                (requester_id, str(telegram_user_id), str(chat_id), now),
+            )
+            conn.execute(
+                """
+                INSERT INTO events (
+                    request_id, timestamp, actor, action, justification, result
+                ) VALUES (NULL, ?, ?, 'TELEGRAM_ALLOWLIST_BOUND', ?, 'DONE')
+                """,
+                (
+                    now,
+                    actor,
+                    f"requester_id={requester_id}; private_chat_verified=true",
+                ),
+            )
+            return {
+                "requester_id": requester_id,
+                "telegram_user_id": str(telegram_user_id),
+                "chat_id": str(chat_id),
+                "verified_at": now,
+            }
+
     def get_telegram_binding(self, requester_id: str) -> dict[str, Any] | None:
         with self.connect() as conn:
             row = conn.execute(
