@@ -72,6 +72,31 @@ if not payload.get("ok") or not isinstance(result, dict):
 print(f"[telegram-preflight] getMe ok bot_id={result.get('id')}")
 PY
 
+python - <<'PY'
+import asyncio
+import os
+import sys
+
+import httpx
+
+async def main() -> None:
+    token = os.environ["TELEGRAM_BOT_TOKEN"]
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
+            response = await client.get(f"https://api.telegram.org/bot{token}/getMe")
+            payload = response.json()
+    except Exception as exc:
+        print(f"[telegram-preflight] async-httpx getMe failed: {type(exc).__name__}", file=sys.stderr)
+        raise SystemExit(1)
+    result = payload.get("result") if isinstance(payload, dict) else None
+    if response.status_code != 200 or not payload.get("ok") or not isinstance(result, dict):
+        print("[telegram-preflight] async-httpx getMe returned an invalid response", file=sys.stderr)
+        raise SystemExit(1)
+    print(f"[telegram-preflight] async-httpx getMe ok bot_id={result.get('id')}")
+
+asyncio.run(main())
+PY
+
 # Keep a persistent gateway log while mirroring it to Railway so an unhealthy
 # Telegram poller cannot hide behind a green API healthcheck.
 hermes gateway > >(tee -a /data/.hermes/logs/internal-intake-gateway.log) 2>&1 &
