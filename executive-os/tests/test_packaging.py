@@ -30,6 +30,7 @@ class PackagingTests(unittest.TestCase):
         start = (self.repo / "start-internal-intake.sh").read_text(encoding="utf-8")
         self.assertIn('[telegram-preflight] getMe ok bot_id=', start)
         self.assertIn('[telegram-preflight] async-httpx getMe ok bot_id=', start)
+        self.assertIn('[telegram-preflight] ptb initialize ok bot_id=', start)
         self.assertNotIn('print(token', start)
         self.assertIn(
             'hermes gateway > >(tee -a /data/.hermes/logs/internal-intake-gateway.log) 2>&1 &',

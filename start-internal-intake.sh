@@ -97,6 +97,50 @@ async def main() -> None:
 asyncio.run(main())
 PY
 
+if ! timeout 25s python - <<'PY'
+import asyncio
+import os
+import sys
+
+from telegram.ext import Application
+from telegram.request import HTTPXRequest
+
+async def main() -> None:
+    token = os.environ["TELEGRAM_BOT_TOKEN"]
+    request = HTTPXRequest(
+        connection_pool_size=8,
+        pool_timeout=5,
+        connect_timeout=10,
+        read_timeout=10,
+        write_timeout=10,
+    )
+    updates = HTTPXRequest(
+        connection_pool_size=8,
+        pool_timeout=5,
+        connect_timeout=10,
+        read_timeout=10,
+        write_timeout=10,
+    )
+    app = Application.builder().token(token).request(request).get_updates_request(updates).build()
+    try:
+        await app.initialize()
+        print(f"[telegram-preflight] ptb initialize ok bot_id={app.bot.id}")
+    except Exception as exc:
+        print(f"[telegram-preflight] ptb initialize failed: {type(exc).__name__}", file=sys.stderr)
+        raise SystemExit(1)
+    finally:
+        try:
+            await app.shutdown()
+        except Exception:
+            pass
+
+asyncio.run(main())
+PY
+then
+  echo "[telegram-preflight] ptb initialize exceeded 25s" >&2
+  exit 1
+fi
+
 # Keep a persistent gateway log while mirroring it to Railway so an unhealthy
 # Telegram poller cannot hide behind a green API healthcheck.
 hermes gateway > >(tee -a /data/.hermes/logs/internal-intake-gateway.log) 2>&1 &
