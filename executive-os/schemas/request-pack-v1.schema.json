@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://belkora.internal/schemas/request-pack-v1.schema.json",
+  "title": "Bureau Ahmed request pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "submission_id",
+    "subject",
+    "request_type",
+    "decision_required",
+    "requested_decision",
+    "business_context",
+    "impact",
+    "preparation",
+    "evidence",
+    "proposed_operations",
+    "sensitivity"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "submission_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]+$"
+    },
+    "subject": {"type": "string", "minLength": 3, "maxLength": 240},
+    "request_type": {
+      "type": "string",
+      "enum": [
+        "decision",
+        "approval",
+        "supplier",
+        "purchase",
+        "payment",
+        "project",
+        "task",
+        "document",
+        "client",
+        "incident",
+        "information",
+        "idea",
+        "other"
+      ]
+    },
+    "decision_required": {"type": "boolean"},
+    "requested_decision": {"type": "string", "minLength": 1, "maxLength": 500},
+    "business_context": {"$ref": "#/$defs/businessContext"},
+    "impact": {"$ref": "#/$defs/impact"},
+    "preparation": {"$ref": "#/$defs/preparation"},
+    "evidence": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {"$ref": "#/$defs/evidence"}
+    },
+    "proposed_operations": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {"$ref": "#/$defs/proposedOperation"}
+    },
+    "sensitivity": {"$ref": "#/$defs/sensitivity"},
+    "free_text_context": {"type": "string", "maxLength": 8000}
+  },
+  "$defs": {
+    "objectReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system", "object_type", "record_id", "label"],
+      "properties": {
+        "system": {"type": "string", "enum": ["odoo", "drive", "telegram", "other"]},
+        "object_type": {"type": "string", "minLength": 1, "maxLength": 80},
+        "model": {"type": ["string", "null"], "maxLength": 100},
+        "record_id": {"type": "string", "minLength": 1, "maxLength": 160},
+        "label": {"type": "string", "minLength": 1, "maxLength": 300},
+        "company_id": {"type": ["string", "null"], "maxLength": 80},
+        "url": {"type": ["string", "null"], "maxLength": 2000},
+        "version": {"type": ["string", "null"], "maxLength": 160},
+        "write_date": {"type": ["string", "null"], "maxLength": 80},
+        "resolution_evidence": {"type": ["string", "null"], "maxLength": 1000},
+        "verification_receipt": {"type": ["string", "null"], "maxLength": 4000}
+      }
+    },
+    "businessContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_status", "primary_object", "related_objects", "unresolved_reason"],
+      "properties": {
+        "context_status": {"type": "string", "enum": ["exact", "not_applicable", "unresolved"]},
+        "primary_object": {"anyOf": [{"$ref": "#/$defs/objectReference"}, {"type": "null"}]},
+        "related_objects": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {"$ref": "#/$defs/objectReference"}
+        },
+        "unresolved_reason": {"type": ["string", "null"], "maxLength": 1000}
+      }
+    },
+    "impact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deadline_at",
+        "consequence_2h",
+        "consequence_tomorrow",
+        "consequence_level",
+        "people_blocked",
+        "amount_mad",
+        "irreversible",
+        "human_safety_risk",
+        "serious_legal_risk",
+        "major_client_crisis",
+        "operation_blocked"
+      ],
+      "properties": {
+        "deadline_at": {"type": ["string", "null"], "maxLength": 80},
+        "consequence_2h": {"type": ["string", "null"], "maxLength": 2000},
+        "consequence_tomorrow": {"type": ["string", "null"], "maxLength": 2000},
+        "consequence_level": {"type": "string", "enum": ["none", "minor", "material", "major", "critical"]},
+        "people_blocked": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "amount_mad": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000000000},
+        "irreversible": {"type": "boolean"},
+        "human_safety_risk": {"type": "boolean"},
+        "serious_legal_risk": {"type": "boolean"},
+        "major_client_crisis": {"type": "boolean"},
+        "operation_blocked": {"type": "boolean"}
+      }
+    },
+    "researchSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "kind", "reference"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1, "maxLength": 300},
+        "kind": {"type": "string", "enum": ["odoo", "document", "web", "interview", "field", "other"]},
+        "reference": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "checked_at": {"type": ["string", "null"], "maxLength": 80},
+        "finding": {"type": ["string", "null"], "maxLength": 2000}
+      }
+    },
+    "option": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["option_id", "title", "advantages", "drawbacks", "risks"],
+      "properties": {
+        "option_id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "title": {"type": "string", "minLength": 1, "maxLength": 300},
+        "advantages": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 1000}},
+        "drawbacks": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 1000}},
+        "risks": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 1000}},
+        "estimated_cost_mad": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000000000}
+      }
+    },
+    "workItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "result", "evidence_reference"],
+      "properties": {
+        "action": {"type": "string", "minLength": 1, "maxLength": 500},
+        "result": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "evidence_reference": {"type": ["string", "null"], "maxLength": 2000},
+        "completed_at": {"type": ["string", "null"], "maxLength": 80}
+      }
+    },
+    "preparation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "research_performed",
+        "research_summary",
+        "sources",
+        "no_research_reason",
+        "options",
+        "recommendation",
+        "work_completed",
+        "no_work_reason",
+        "remaining_blocker"
+      ],
+      "properties": {
+        "research_performed": {"type": "boolean"},
+        "research_summary": {"type": ["string", "null"], "maxLength": 5000},
+        "sources": {"type": "array", "maxItems": 30, "items": {"$ref": "#/$defs/researchSource"}},
+        "no_research_reason": {"type": ["string", "null"], "maxLength": 1000},
+        "options": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/option"}},
+        "recommendation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["option_id", "summary", "rationale"],
+          "properties": {
+            "option_id": {"type": ["string", "null"], "maxLength": 80},
+            "summary": {"type": ["string", "null"], "maxLength": 2000},
+            "rationale": {"type": ["string", "null"], "maxLength": 3000}
+          }
+        },
+        "work_completed": {"type": "array", "maxItems": 30, "items": {"$ref": "#/$defs/workItem"}},
+        "no_work_reason": {"type": ["string", "null"], "maxLength": 1000},
+        "remaining_blocker": {"type": ["string", "null"], "maxLength": 2000}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "label", "reference"],
+      "properties": {
+        "kind": {"type": "string", "enum": ["odoo", "document", "drive", "telegram", "photo", "email", "other"]},
+        "label": {"type": "string", "minLength": 1, "maxLength": 300},
+        "reference": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "checksum": {"type": ["string", "null"], "maxLength": 160},
+        "version": {"type": ["string", "null"], "maxLength": 160}
+      }
+    },
+    "proposedOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "action",
+        "target",
+        "requested_executor",
+        "payload",
+        "rationale",
+        "approval_required",
+        "reversible"
+      ],
+      "properties": {
+        "operation_id": {"type": "string", "minLength": 1, "maxLength": 100},
+        "action": {
+          "type": "string",
+          "enum": ["create_activity", "post_internal_note", "update_task_fields", "link_document"]
+        },
+        "target": {"$ref": "#/$defs/objectReference"},
+        "requested_executor": {
+          "type": "string",
+          "enum": ["requester", "responsible_owner", "bureau_ahmed_writer", "ahmed", "other"]
+        },
+        "payload": {"type": "object", "maxProperties": 30},
+        "rationale": {"type": "string", "minLength": 1, "maxLength": 3000},
+        "approval_required": {"const": true},
+        "reversible": {"type": "boolean"}
+      }
+    },
+    "sensitivity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "contains_personal_data", "contains_financial_data"],
+      "properties": {
+        "classification": {"type": "string", "enum": ["internal", "confidential", "restricted"]},
+        "contains_personal_data": {"type": "boolean"},
+        "contains_financial_data": {"type": "boolean"}
+      }
+    }
+  }
+}

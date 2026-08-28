@@ -1,0 +1,129 @@
+{
+  "schema_version": "1.0",
+  "submission_id": "pilot-task-4521-20260828-01",
+  "subject": "Valider la solution proposée pour la tâche chantier",
+  "request_type": "approval",
+  "decision_required": true,
+  "requested_decision": "APPROUVER l'option A ou DEMANDER MODIFICATION",
+  "business_context": {
+    "context_status": "exact",
+    "primary_object": {
+      "system": "odoo",
+      "object_type": "task",
+      "model": "project.task",
+      "record_id": "4521",
+      "label": "Préparer le dossier technique chantier",
+      "company_id": "1",
+      "url": "https://example.invalid/odoo/project.task/4521",
+      "version": null,
+      "write_date": "2026-08-28T09:00:00Z",
+      "resolution_evidence": "À remplacer par le résultat du lecteur Odoo contrôlé",
+      "verification_receipt": null
+    },
+    "related_objects": [],
+    "unresolved_reason": null
+  },
+  "impact": {
+    "deadline_at": "2026-08-29T12:00:00+01:00",
+    "consequence_2h": "Aucune interruption immédiate.",
+    "consequence_tomorrow": "Le livrable chantier sera décalé d'une journée.",
+    "consequence_level": "material",
+    "people_blocked": 1,
+    "amount_mad": null,
+    "irreversible": false,
+    "human_safety_risk": false,
+    "serious_legal_risk": false,
+    "major_client_crisis": false,
+    "operation_blocked": false
+  },
+  "preparation": {
+    "research_performed": true,
+    "research_summary": "La tâche, le document source et les contraintes du projet ont été relus.",
+    "sources": [
+      {
+        "title": "Tâche Odoo 4521",
+        "kind": "odoo",
+        "reference": "project.task:4521",
+        "checked_at": "2026-08-28T10:00:00Z",
+        "finding": "L'option technique reste à valider par Ahmed."
+      }
+    ],
+    "no_research_reason": null,
+    "options": [
+      {
+        "option_id": "A",
+        "title": "Conserver la solution préparée",
+        "advantages": ["Livrable prêt"],
+        "drawbacks": ["Contrôle final Ahmed requis"],
+        "risks": ["Décalage si réponse après demain"],
+        "estimated_cost_mad": null
+      },
+      {
+        "option_id": "B",
+        "title": "Reprendre l'étude",
+        "advantages": ["Réexamen complet"],
+        "drawbacks": ["Une journée supplémentaire"],
+        "risks": ["Retard chantier"],
+        "estimated_cost_mad": null
+      }
+    ],
+    "recommendation": {
+      "option_id": "A",
+      "summary": "Approuver l'option A",
+      "rationale": "Elle répond aux contraintes vérifiées et évite un retard sans gain démontré."
+    },
+    "work_completed": [
+      {
+        "action": "Relire la tâche et le document technique",
+        "result": "Dossier complet et cohérent",
+        "evidence_reference": "project.task:4521",
+        "completed_at": "2026-08-28T10:10:00Z"
+      }
+    ],
+    "no_work_reason": null,
+    "remaining_blocker": "Validation finale d'Ahmed"
+  },
+  "evidence": [
+    {
+      "kind": "odoo",
+      "label": "Tâche 4521",
+      "reference": "project.task:4521",
+      "checksum": null,
+      "version": "2026-08-28T09:00:00Z"
+    }
+  ],
+  "proposed_operations": [
+    {
+      "operation_id": "activity-review-01",
+      "action": "create_activity",
+      "target": {
+        "system": "odoo",
+        "object_type": "task",
+        "model": "project.task",
+        "record_id": "4521",
+        "label": "Préparer le dossier technique chantier",
+        "company_id": "1",
+        "url": "https://example.invalid/odoo/project.task/4521",
+        "version": null,
+        "write_date": "2026-08-28T09:00:00Z",
+        "resolution_evidence": "À remplacer par le résultat du lecteur Odoo contrôlé",
+        "verification_receipt": null
+      },
+      "requested_executor": "bureau_ahmed_writer",
+      "payload": {
+        "activity_type": "review",
+        "summary": "Décision Ahmed sur l'option A",
+        "deadline_at": "2026-08-29T12:00:00+01:00"
+      },
+      "rationale": "L'activité doit rester sur la tâche qui porte le livrable.",
+      "approval_required": true,
+      "reversible": true
+    }
+  ],
+  "sensitivity": {
+    "classification": "internal",
+    "contains_personal_data": false,
+    "contains_financial_data": false
+  },
+  "free_text_context": "Dossier pilote synthétique."
+}

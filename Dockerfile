@@ -205,7 +205,8 @@ COPY server.py /app/server.py
 COPY templates/ /app/templates/
 COPY executive-os/ /app/executive-os/
 COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
+COPY start-internal-intake.sh /app/start-internal-intake.sh
+RUN chmod +x /app/start.sh /app/start-internal-intake.sh
 
 ENV HOME=/data
 ENV HERMES_HOME=/data/.hermes

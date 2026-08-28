@@ -67,6 +67,10 @@ def missing_fields(payload: dict[str, Any]) -> list[str]:
         missing.append("odoo_reference")
     if payload.get("decision_required", True) and not _present(payload.get("recommendation")):
         missing.append("recommendation")
+    if payload.get("prepared_request"):
+        for gap in payload.get("preparation_gaps") or []:
+            if gap not in missing:
+                missing.append(str(gap))
     return missing
 
 
@@ -150,6 +154,9 @@ def classify(
     route = _choose_route(payload, priority, missing)
     confidence = "high" if not missing else ("medium" if priority == Priority.P0 else "low")
     questions = [QUESTION_BY_FIELD[field] for field in missing if field in QUESTION_BY_FIELD]
+    for question in payload.get("preparation_questions") or []:
+        if question not in questions:
+            questions.append(str(question))
     return TriageDecision(
         priority=priority,
         route=route,

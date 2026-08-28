@@ -3,7 +3,12 @@ name = "belkora-hermes-executive-os"
 version = "0.1.0"
 description = "Read-only Phase 1 orchestration ledger and triage tools for Hermes on Railway"
 requires-python = ">=3.11"
-dependencies = ["PyYAML>=6.0.2,<7"]
+dependencies = [
+  "PyYAML>=6.0.2,<7",
+  "jsonschema>=4.23.0,<5",
+  "starlette>=0.40.0",
+  "uvicorn>=0.30.0",
+]
 
 [project.optional-dependencies]
 mcp = ["mcp==2.0.0"]

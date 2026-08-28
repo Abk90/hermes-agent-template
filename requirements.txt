@@ -10,3 +10,4 @@ websockets>=12.0
 # Used by the idempotent Executive OS bootstrap to deep-merge the persistent
 # Hermes MCP configuration without discarding existing servers.
 PyYAML>=6.0.2,<7
+jsonschema>=4.23.0,<5

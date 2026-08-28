@@ -30,7 +30,13 @@ Ne pose que les questions encore manquantes. Pour une demande fournisseur vague,
 
 ## Enregistrement
 
-Construis une cle stable `telegram:<chat_id>:<message_id>` puis appelle `mcp_executive_os_triage_request` avec un JSON structure. Reutilise toujours la meme cle pour les retries et les clarifications du meme message racine.
+Sur `/start <token>`, appelle `mcp_internal_intake_bind_telegram_start` avec l'ID Telegram numerique et le chat prive observes. Le serveur refuse tout ID qui ne correspond pas a l'identite pre-verifiee.
+
+Pour une demande nee dans Telegram, construis le request pack v1 puis appelle `mcp_internal_intake_submit_telegram_request`. Reutilise toujours le meme `chat_id` et `message_id` lors d'un retry.
+
+Avant de qualifier une reference Odoo comme exacte, utilise `mcp_internal_intake_search_odoo_context` uniquement pour un projet ou une tache, puis `mcp_internal_intake_verify_odoo_context` sur l'ID retenu. Reutilise le reçu signe tel quel dans le request pack. Pour un document ou une approbation, exige l'ID exact avant la verification. Si plusieurs candidats restent possibles, garde le contexte `unresolved` et pose une question ; ne choisis jamais un homonyme.
+
+Pour une demande deja creee par API, recupere-la avec `mcp_internal_intake_get_intake_request`. Ajoute chaque reponse au meme `request_id` avec `mcp_internal_intake_append_intake_message`; ne cree pas une seconde demande.
 
 Le resultat du ledger est la reference. Ne pretend jamais qu'une action Odoo ou OmniFocus a reussi : ce skill ne les execute pas.
 

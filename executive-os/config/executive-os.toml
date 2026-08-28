@@ -39,6 +39,15 @@ allowed_users_env = "INTERNAL_INTAKE_TELEGRAM_ALLOWED_USERS"
 allow_all = false
 pairing = "manual"
 
+[internal_intake.context_reader]
+private_network_required = true
+searchable_models = ["project.project", "project.task"]
+exact_id_models = ["project.project", "project.task", "documents.document", "approval.request"]
+company_scope_from_device_identity = true
+signed_receipts_required = true
+receipt_ttl_minutes = 60
+writes_enabled = false
+
 [odoo]
 mode = "read"
 server = "odoo"
