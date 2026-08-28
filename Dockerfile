@@ -203,12 +203,17 @@ RUN mkdir -p /data/.hermes
 
 COPY server.py /app/server.py
 COPY templates/ /app/templates/
+COPY executive-os/ /app/executive-os/
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
 ENV HOME=/data
 ENV HERMES_HOME=/data/.hermes
 ENV WORKSPACE_MCP_CREDENTIALS_DIR=/data/.hermes/workspace-mcp/credentials
+ENV EXECUTIVE_OS_ROOT=/app/executive-os
+ENV EXECUTIVE_OS_CONFIG=/app/executive-os/config/executive-os.toml
+ENV EXECUTIVE_OS_DB=/data/.hermes/executive-os/ledger.sqlite3
+ENV PYTHONPATH=/app/executive-os/src
 
 # Points hermes at our pre-built TUI bundle. hermes's _make_tui_argv checks
 # HERMES_TUI_DIR first: if dist/entry.js exists there, it skips the npm

@@ -39,6 +39,13 @@ fi
 
 [ ! -f /data/.hermes/.env ] && touch /data/.hermes/.env
 
+# Install only the versioned, read-only Phase 1 Executive OS surface. The
+# bootstrap deep-merges the MCP entry, backs up config.yaml once and refuses to
+# overwrite locally changed managed skills or an unmanaged MCP entry.
+if [ "${EXECUTIVE_OS_ENABLED:-false}" = "true" ]; then
+  python -m executive_os.bootstrap
+fi
+
 # Bootstrap OAuth tokens from env var (e.g. xAI Grok SuperGrok).
 # Set HERMES_AUTH_JSON_BOOTSTRAP to the contents of a locally-generated
 # ~/.hermes/auth.json. Written only once — subsequent token refreshes update

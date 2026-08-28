@@ -1,0 +1,82 @@
+[system]
+phase = "observe"
+timezone = "Africa/Casablanca"
+language = "fr"
+ledger_path = "/data/.hermes/executive-os/ledger.sqlite3"
+
+[triage]
+timezone = "Africa/Casablanca"
+p0_window_minutes = 120
+p1_window_hours = 12
+significant_amount_mad = 20000
+large_amount_mad = 100000
+
+[business_hours]
+weekdays = [1, 2, 3, 4, 5, 6]
+start = "08:00"
+end = "18:30"
+
+[polling]
+odoo_minutes = 15
+connector_health_minutes = 15
+notify_when_empty = false
+silent_marker = "[SILENT]"
+
+[batches]
+times = ["10:30", "14:30", "17:00"]
+max_items = 20
+
+[telegram.executive]
+service = "hermes-agent"
+allowed_users_env = "EXECUTIVE_TELEGRAM_ALLOWED_USERS"
+allow_all = false
+
+[telegram.internal_intake]
+enabled = false
+service = "hermes-internal-intake"
+bot_token_env = "INTERNAL_INTAKE_TELEGRAM_BOT_TOKEN"
+allowed_users_env = "INTERNAL_INTAKE_TELEGRAM_ALLOWED_USERS"
+allow_all = false
+pairing = "manual"
+
+[odoo]
+mode = "read"
+server = "odoo"
+allowed_tools = [
+  "search_records",
+  "get_record",
+  "list_models",
+  "list_resource_templates",
+  "aggregate_records",
+]
+writes_enabled = false
+
+[omnifocus]
+mode = "read"
+transport = "mac-outbound-relay"
+max_snapshot_age_minutes = 30
+allowed_tools = [
+  "query_omnifocus",
+  "get_perspective_view",
+  "list_perspectives",
+  "list_tags",
+]
+writes_enabled = false
+
+[security]
+direct_human_path_for_p0 = true
+store_message_body = true
+redact_secrets = true
+require_idempotency_key = true
+require_readback_after_write = true
+financial_writes_enabled = false
+odoo_writes_enabled = false
+omnifocus_writes_enabled = false
+
+[features]
+internal_intake = false
+odoo_approval_monitor = false
+omnifocus_snapshot = false
+executive_digest = false
+weekly_review = false
+analytics = false
