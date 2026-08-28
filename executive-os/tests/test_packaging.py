@@ -47,6 +47,14 @@ class PackagingTests(unittest.TestCase):
         self.assertTrue((root / "profiles" / "internal-intake" / "SOUL.md").is_file())
         self.assertTrue((root / "scripts" / "install_portable_skill.py").is_file())
 
+    def test_internal_intake_patches_trusted_telegram_transport_context(self) -> None:
+        repository = Path(__file__).resolve().parents[2]
+        dockerfile = (repository / "Dockerfile").read_text(encoding="utf-8")
+        patcher = repository / "patches" / "patch_hermes_telegram_context.py"
+        self.assertTrue(patcher.is_file())
+        self.assertIn("patch_hermes_telegram_context.py", dockerfile)
+        self.assertIn("TRUSTED_TELEGRAM_CONTEXT", patcher.read_text(encoding="utf-8"))
+
     def test_gitignore_does_not_hide_nested_skills(self) -> None:
         gitignore = (self.repo / ".gitignore").read_text(encoding="utf-8").splitlines()
         self.assertNotIn("skills/", gitignore)

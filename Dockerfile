@@ -130,7 +130,9 @@ RUN ln -sf libsqlite3.so.3.53.4 /usr/local/lib/libsqlite3.so.0 && \
 # GLOBAL cutoff, so any date before 2026-08-07 leaves nemo-relay>=0.7.1
 # unsatisfiable and hard-fails the build. Same trap for cryptography==50.0.0
 # and h2 4.4.1. If you ever need that flag, pass a date >= 2026-08-07.
+COPY patches/patch_hermes_telegram_context.py /tmp/patch_hermes_telegram_context.py
 RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent && \
+    python /tmp/patch_hermes_telegram_context.py /opt/hermes-agent/plugins/platforms/telegram/adapter.py && \
     cd /opt/hermes-agent && \
     uv pip install --system --no-cache -e ".[all,messaging,voice,tts-premium,honcho,bedrock,anthropic,edge-tts,hindsight,vision]" && \
     npm install --prefer-offline --no-audit && \
