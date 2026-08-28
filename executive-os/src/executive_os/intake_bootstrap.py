@@ -140,7 +140,13 @@ def bootstrap_intake(app_root: Path, hermes_home: Path) -> dict[str, Any]:
         if current_digest != previous_soul_digest:
             soul_result = "preserved-local-change"
     elif soul_target.exists() and not previous_soul_digest:
-        soul_result = "preserved-unmanaged"
+        if _enabled(os.environ.get("INTERNAL_INTAKE_ADOPT_UNMANAGED_SOUL")):
+            backup = soul_target.with_name("SOUL.md.pre-internal-intake.bak")
+            if not backup.exists():
+                shutil.copy2(soul_target, backup)
+                os.chmod(backup, 0o600)
+        else:
+            soul_result = "preserved-unmanaged"
     if soul_result == "installed":
         _atomic_text(soul_target, soul_source.read_text(encoding="utf-8"), 0o600)
         state["soul_digest"] = soul_digest

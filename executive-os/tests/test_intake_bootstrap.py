@@ -72,6 +72,23 @@ class IntakeBootstrapTests(unittest.TestCase):
             config["mcp_servers"]["internal-intake"]["tools"]["include"],
         )
 
+    def test_dedicated_service_can_adopt_seeded_unmanaged_soul_with_backup(self):
+        soul = self.home / "SOUL.md"
+        soul.write_text("# Seeded upstream soul\n", encoding="utf-8")
+        configured = {
+            "INTERNAL_INTAKE_ADOPT_UNMANAGED_SOUL": "true",
+            "TELEGRAM_ALLOWED_USERS": "123456",
+            "INTERNAL_INTAKE_TELEGRAM_ADMIN_USERS": "123456",
+        }
+        with patch.dict("os.environ", configured, clear=False):
+            result = self.bootstrap(self.app, self.home)
+        self.assertEqual("installed", result["soul"])
+        self.assertEqual("# Bureau Ahmed\n", soul.read_text(encoding="utf-8"))
+        self.assertEqual(
+            "# Seeded upstream soul\n",
+            (self.home / "SOUL.md.pre-internal-intake.bak").read_text(encoding="utf-8"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
